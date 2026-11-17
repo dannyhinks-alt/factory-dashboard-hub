@@ -43,8 +43,8 @@ export function Sel({ value, options, onChange, label, gap = true, blank = '— 
   return <select aria-label={label} className={`inp ${gap && !value ? 'inp-gap' : ''}`} value={value} onChange={(e) => onChange(e.target.value)}><option value="">{blank}</option>{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
 }
 
-export function Toggle({ on, onChange, label, onText = 'ON', offText = 'OFF' }: { on: boolean; onChange: (v: boolean) => void; label: string; onText?: string; offText?: string }) {
-  return <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={`inline-flex items-center gap-2 px-2 py-1 rounded border text-[12px] font-semibold ${on ? 'bg-good text-white border-good' : 'bg-white text-steel-700 border-steel-300'}`}>
+export function Toggle({ on, onChange, label, onText = 'ON', offText = 'OFF', small = false }: { on: boolean; onChange: (v: boolean) => void; label: string; onText?: string; offText?: string; small?: boolean }) {
+  return <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={`inline-flex items-center gap-2 px-2 ${small ? 'h-5 text-[11px]' : 'py-1 text-[12px]'} rounded border font-semibold ${on ? 'bg-good text-white border-good' : 'bg-white text-steel-700 border-steel-300'}`}>
     <span className={`w-7 h-4 rounded-full relative ${on ? 'bg-white/40' : 'bg-steel-300'}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${on ? 'left-3.5' : 'left-0.5'}`} /></span>{on ? onText : offText}</button>;
 }
 

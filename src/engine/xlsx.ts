@@ -3,7 +3,7 @@ import { LEVER_PRESETS, DEFAULT_LIMITS, DEFAULT_SHIFT_HOURS, DICTIONARY, GATES, 
 import { calendarHours, cells, compareRows, costByFactory } from './calc';
 import { fpdCalc, solve } from './flow';
 import { pressureList } from './sensitivity';
-import { emptyModel } from './demo';
+import { emptyModel } from './blank';
 import { dataSheetAoa, isoDate, parseDataSheet, toNum } from './importXlsx';
 import type { Model, OeeMode, RegType, Rating, StartRule } from './types';
 

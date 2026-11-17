@@ -7,53 +7,67 @@ import { band } from '../engine/calc';
 export const PALETTE = ['#0b5cab', '#c2410c', '#1f8a4c', '#7c3aed', '#b45309', '#0e7490', '#be185d', '#4d7c0f', '#475569', '#a21caf'];
 const W = 640;
 const Legend = ({ items }: { items: { name: string; color: string }[] }) => <div className="flex flex-wrap gap-3 text-[11px] text-steel-700 mt-1">{items.map((i) => <span key={i.name} className="inline-flex items-center gap-1"><i className="inline-block w-3 h-3 rounded-sm" style={{ background: i.color }} />{i.name}</span>)}</div>;
-const Svg = ({ h, children, label }: { h: number; children: ReactNode; label: string }) => <svg role="img" aria-label={label} viewBox={`0 0 ${W} ${h}`} className="w-full h-auto">{children}</svg>;
+const Svg = ({ h, children, label }: { h: number; children: ReactNode; label: string }) => <svg role="img" aria-label={label} viewBox={`0 0 ${W} ${h}`} className="w-full h-auto max-w-[900px]">{children}</svg>;
 
-/** Horizontal grouped bars; values are fractions shown as %. Colours may follow RAG bands for single series. */
+const NAME_W = 165; // fixed cell-name column: never shares space with bars or negative labels
+const GUTTER = 58; // reserved space left of the 0% axis for negative value labels
+const ROW = 34;
+const NoData = () => <span className="inline-block rounded-full px-2 text-[12px] leading-5" style={{ background: '#E2E8F0', color: '#94a3b8' }}>no data</span>;
+const Name = ({ text }: { text: string }) => <div className="shrink-0 truncate text-[13px] text-slate-800" style={{ width: NAME_W, flexShrink: 0 }} title={text}>{text}</div>;
+const Empty = () => <div className="text-slate-500 p-4 text-[13px]">No data to chart.</div>;
+
+/** Horizontal grouped bars on a shared axis. Plain HTML/CSS rows, so type and bars never scale with screen width. */
 export function HBars({ rows, series, label, fmt = (v: number) => `${(v * 100).toFixed(0)}%`, marker, bandColour = false, zero = true }: {
   rows: { label: string; values: (number | null)[] }[]; series: { name: string; color: string }[]; label: string; fmt?: (v: number) => string; marker?: (rowIdx: number) => number | null; bandColour?: boolean; zero?: boolean }) {
   const vals = rows.flatMap((r) => r.values).filter((v): v is number => v !== null);
   const marks = rows.map((_, i) => marker?.(i) ?? null).filter((v): v is number => v !== null);
-  const all = [...vals, ...marks, zero ? 0 : vals[0] ?? 0];
-  const lo = Math.min(...all, 0), hi = Math.max(...all, 0.0001), L = 150, R = W - 40, sc = (v: number) => L + ((v - lo) / (hi - lo || 1)) * (R - L);
-  const bh = 14, gap = 8, rh = series.length * bh + gap, H = rows.length * rh + 28;
-  if (!rows.length) return <div className="text-steel-500 p-4">No data to chart.</div>;
-  return <div><Svg h={H} label={label}>
-    <line x1={sc(0)} x2={sc(0)} y1={0} y2={H - 20} stroke="#8a97a5" />
-    {rows.map((r, i) => <g key={r.label} transform={`translate(0,${i * rh + 4})`}>
-      <text x={L - 6} y={(series.length * bh) / 2 + 4} textAnchor="end" fontSize="11" fill="#34414e">{r.label.length > 22 ? r.label.slice(0, 21) + '…' : r.label}</text>
-      {r.values.map((v, j) => v === null ? <text key={j} x={sc(0) + 4} y={j * bh + 11} fontSize="10" fill="#8a97a5">no data</text> :
-        <g key={j}><rect x={Math.min(sc(0), sc(v))} y={j * bh} width={Math.abs(sc(v) - sc(0))} height={bh - 2} fill={bandColour && series.length === 1 ? BAND_COL[band(v)] : series[j].color} rx={1}><title>{`${r.label} · ${series[j].name}: ${fmt(v)}`}</title></rect>
-          <text x={v >= 0 ? sc(v) + 3 : sc(v) - 3} y={j * bh + 11} fontSize="10" textAnchor={v >= 0 ? 'start' : 'end'} fill="#1b2430">{fmt(v)}</text></g>)}
-      {marker && marker(i) !== null && <g><line x1={sc(marker(i)!)} x2={sc(marker(i)!)} y1={-2} y2={series.length * bh} stroke="#1b2430" strokeWidth={2} strokeDasharray="3 2" /></g>}
-    </g>)}
-  </Svg><Legend items={[...series, ...(marker ? [{ name: 'Class limit', color: '#1b2430' }] : [])]} /></div>;
+  if (!rows.length) return <Empty />;
+  const all = [...vals, ...marks, zero ? 0 : vals[0] ?? 0]; const lo = Math.min(...all, 0), hi = Math.max(...all, 0.0001), range = hi - lo || 1;
+  const pos = (v: number) => ((v - lo) / range) * 100; const bh = series.length === 1 ? 14 : series.length === 2 ? 12 : 9;
+  return <div role="img" aria-label={label}>
+    {rows.map((r, i) => <div key={`${i}-${r.label}`} className="flex items-center" style={{ height: ROW }}>
+      <Name text={r.label} />
+      <div className="relative flex-1" style={{ height: ROW, marginLeft: GUTTER, marginRight: 52 }}>
+        <div className="absolute top-0 bottom-0" style={{ left: `${pos(0)}%`, width: 1, background: '#94a3b8' }} />
+        {r.values.every((v) => v === null) && <div className="absolute" style={{ left: `${pos(0)}%`, top: 6, marginLeft: 6 }}><NoData /></div>}
+        {r.values.map((v, j) => v === null ? null : <div key={j} className="absolute" style={{ top: (ROW - (bh * series.length + 2 * (series.length - 1))) / 2 + j * (bh + 2), height: bh, left: `${pos(Math.min(0, v))}%`, width: `${Math.abs(v) / range * 100}%`, background: bandColour && series.length === 1 ? BAND_COL[band(v)] : series[j].color, borderRadius: 2 }} title={`${r.label} · ${series[j].name}: ${fmt(v)}`}>
+          <span className="absolute text-[12px] leading-none whitespace-nowrap tabular-nums" style={{ top: Math.max(0, (bh - 12) / 2), ...(v >= 0 ? { left: '100%', marginLeft: 4 } : { right: '100%', marginRight: 4 }) }}>{bh >= 12 ? fmt(v) : ''}</span></div>)}
+        {marker && marker(i) !== null && <div className="absolute" style={{ left: `${pos(marker(i)!)}%`, top: 3, bottom: 3, width: 2, background: '#0F172A' }} title="Class limit" />}
+      </div></div>)}
+    <Legend items={[...series, ...(marker ? [{ name: 'Class limit', color: '#0F172A' }] : [])]} /></div>;
 }
 
 export function StackedH({ rows, parts, label, unit = '', pctMode = false }: { rows: { label: string; v: number[] }[]; parts: { name: string; color: string }[]; label: string; unit?: string; pctMode?: boolean }) {
   const tot = rows.map((r) => r.v.reduce((a, b) => a + b, 0)); const mx = pctMode ? 1 : Math.max(...tot, 1);
-  const L = 110, R = W - 50, bh = 22, H = rows.length * (bh + 10) + 10;
-  if (!rows.length || tot.every((t) => t === 0)) return <div className="text-steel-500 p-4">No data to chart.</div>;
-  return <div><Svg h={H} label={label}>{rows.map((r, i) => { let x = L; const t = tot[i] || 1; return <g key={r.label} transform={`translate(0,${i * (bh + 10) + 4})`}>
-    <text x={L - 6} y={bh / 2 + 4} textAnchor="end" fontSize="11" fill="#34414e">{r.label}</text>
-    {r.v.map((v, j) => { const w = ((pctMode ? v / t : v) / mx) * (R - L); const el = <rect key={j} x={x} y={0} width={Math.max(0, w)} height={bh} fill={parts[j].color}><title>{`${r.label} · ${parts[j].name}: ${Math.round(v).toLocaleString('en-GB')}${unit} (${((v / t) * 100).toFixed(0)}%)`}</title></rect>; x += w; return el; })}
-    <text x={x + 4} y={bh / 2 + 4} fontSize="10" fill="#1b2430">{Math.round(tot[i]).toLocaleString('en-GB')}{unit}</text></g>; })}</Svg><Legend items={parts} /></div>;
+  if (!rows.length || tot.every((t) => t === 0)) return <Empty />;
+  return <div role="img" aria-label={label}>
+    {rows.map((r, i) => { const t = tot[i] || 1; return <div key={`${i}-${r.label}`} className="flex items-center" style={{ height: ROW }}>
+      <Name text={r.label} />
+      <div className="flex-1 flex items-center" style={{ marginLeft: 8 }}>
+        <div className="flex h-[18px] rounded-sm overflow-hidden" style={{ width: `${((pctMode ? 1 : tot[i] / mx)) * 100}%` }}>
+          {r.v.map((v, j) => <div key={j} style={{ width: `${(v / t) * 100}%`, background: parts[j].color }} title={`${r.label} · ${parts[j].name}: ${Math.round(v).toLocaleString('en-GB')}${unit} (${((v / t) * 100).toFixed(0)}%)`} />)}</div>
+        <span className="ml-2 text-[12px] tabular-nums text-slate-700 whitespace-nowrap">{Math.round(tot[i]).toLocaleString('en-GB')}{unit}</span></div></div>; })}
+    <Legend items={parts} /></div>;
 }
 
-export function VBars({ data, label, color = '#0b5cab', fmt = (v: number) => v.toFixed(1), unit = '' }: { data: { label: string; value: number }[]; label: string; color?: string; fmt?: (v: number) => string; unit?: string }) {
-  const L = 120, R = W - 50, mx = Math.max(...data.map((d) => d.value), 0.0001), bh = 16, H = data.length * (bh + 6) + 6;
-  if (!data.length) return <div className="text-steel-500 p-4">No data to chart.</div>;
-  return <Svg h={H} label={label}>{data.map((d, i) => <g key={d.label} transform={`translate(0,${i * (bh + 6) + 3})`}><text x={L - 6} y={12} textAnchor="end" fontSize="11" fill="#34414e">{d.label}</text>
-    <rect x={L} width={(Math.max(0, d.value) / mx) * (R - L)} height={bh} fill={color}><title>{`${d.label}: ${fmt(d.value)}${unit}`}</title></rect><text x={L + (Math.max(0, d.value) / mx) * (R - L) + 4} y={12} fontSize="10">{fmt(d.value)}{unit}</text></g>)}</Svg>;
+export function VBars({ data, label, color = '#0B5CAB', fmt = (v: number) => v.toFixed(1), unit = '' }: { data: { label: string; value: number }[]; label: string; color?: string; fmt?: (v: number) => string; unit?: string }) {
+  const mx = Math.max(...data.map((d) => d.value), 0.0001);
+  if (!data.length) return <Empty />;
+  return <div role="img" aria-label={label}>{data.map((d, i) => <div key={`${i}-${d.label}`} className="flex items-center" style={{ height: ROW }}>
+    <Name text={d.label} /><div className="flex-1 flex items-center" style={{ marginLeft: 8 }}>
+      <div style={{ width: `${(Math.max(0, d.value) / mx) * 100}%`, height: 16, background: color, borderRadius: 2 }} title={`${d.label}: ${fmt(d.value)}${unit}`} />
+      <span className="ml-2 text-[12px] tabular-nums whitespace-nowrap">{fmt(d.value)}{unit}</span></div></div>)}</div>;
 }
 
 export function Histogram({ values, p10, p50, p90, label }: { values: number[]; p10: number; p50: number; p90: number; label: string }) {
-  if (!values.length) return <div className="text-steel-500 p-4">Run needs FPD data.</div>;
-  const lo = values[0], hi = values[values.length - 1], bins = 24, cnt = Array(bins).fill(0);
+  if (!values.length) return <Empty />;
+  const lo = values[0], hi = values[values.length - 1], bins = 24, cnt = Array<number>(bins).fill(0);
   values.forEach((v) => { cnt[Math.min(bins - 1, Math.floor(((v - lo) / (hi - lo || 1)) * bins))]++; });
-  const mx = Math.max(...cnt), L = 30, R = W - 20, H = 160, bw = (R - L) / bins, x = (v: number) => L + ((v - lo) / (hi - lo || 1)) * (R - L);
-  return <Svg h={H + 24} label={label}>{cnt.map((c, i) => <rect key={i} x={L + i * bw + 1} y={H - (c / mx) * (H - 14)} width={bw - 2} height={(c / mx) * (H - 14)} fill="#0b5cab" opacity={0.75}><title>{`${c} runs`}</title></rect>)}
-    {[[p10, 'P10', '#1f8a4c'], [p50, 'P50', '#1b2430'], [p90, 'P90', '#c0392b']].map(([v, t, c]) => <g key={t as string}><line x1={x(v as number)} x2={x(v as number)} y1={4} y2={H} stroke={c as string} strokeWidth={2} /><text x={x(v as number)} y={H + 14} textAnchor="middle" fontSize="10" fill={c as string}>{t as string} {Math.round(v as number)}d</text></g>)}</Svg>;
+  const mx = Math.max(...cnt); const at = (v: number) => ((v - lo) / (hi - lo || 1)) * 100;
+  return <div role="img" aria-label={label} className="max-w-[760px]"><div className="relative flex items-end gap-[2px]" style={{ height: 140 }}>
+    {cnt.map((c, i) => <div key={i} className="flex-1" style={{ height: `${(c / mx) * 100}%`, background: '#0B5CAB', opacity: 0.75 }} title={`${c} runs`} />)}
+    {([[p10, 'P10', '#059669'], [p50, 'P50', '#0F172A'], [p90, 'P90', '#E11D48']] as const).map(([v, t, c]) => <div key={t} className="absolute top-0 bottom-0" style={{ left: `${at(v)}%`, width: 2, background: c }}><span className="absolute -bottom-5 -translate-x-1/2 text-[12px] whitespace-nowrap" style={{ color: c }}>{t} {Math.round(v)}d</span></div>)}
+  </div><div className="h-6" /></div>;
 }
 
 export function GanttWip({ flow, cursor, onCursor, names }: { flow: FlowResult; cursor: number; onCursor: (t: number) => void; names: Record<string, string> }) {
@@ -68,7 +82,7 @@ export function GanttWip({ flow, cursor, onCursor, names }: { flow: FlowResult; 
   const cur = wipAt(flow, cursor);
   const pick = (e: React.PointerEvent<SVGSVGElement>) => { const r = e.currentTarget.getBoundingClientRect(); const px = ((e.clientX - r.left) / r.width) * W; onCursor(Math.min(end, Math.max(0, ((px - L) / (R - L)) * end))); };
   return <div>
-    <svg role="img" aria-label="Gantt and stacked WIP chart" viewBox={`0 0 ${W} ${H}`} className="w-full h-auto touch-none select-none" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); pick(e); }} onPointerMove={(e) => e.buttons && pick(e)}>
+    <svg role="img" aria-label="Gantt and stacked WIP chart" viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-[1000px] touch-none select-none" onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); pick(e); }} onPointerMove={(e) => e.buttons && pick(e)}>
       {ticks.map((t) => <g key={t}><line x1={x(t)} x2={x(t)} y1={top - 4} y2={top + gH} stroke="#e7ebef" /><text x={x(t)} y={12} fontSize="10" textAnchor="middle" fill="#5d6b79">{ax.unit === 'days' ? Math.round(t) : ax.unit === 'weeks' ? `W${Math.round(t / 7)}` : ax.unit === 'months' ? `M${Math.round(t / 30.4)}` : `Y${(t / 365).toFixed(1)}`}</text></g>)}
       {ids.map((id, i) => { const s = flow.sched[id]; const c = crit.has(id); return <g key={id}><text x={L - 4} y={top + i * rh + 12} textAnchor="end" fontSize="10" fill={c ? '#c0392b' : '#34414e'} fontWeight={c ? 700 : 400}>{id}</text>
         <rect x={x(s.start)} y={top + i * rh + 2} width={Math.max(1.5, x(s.end) - x(s.start))} height={rh - 5} rx={2} fill={c ? '#c0392b' : PALETTE[i % PALETTE.length]} opacity={0.85}><title>{`${id} ${names[id] ?? ''}: day ${s.start.toFixed(1)} to ${s.end.toFixed(1)}`}</title></rect></g>; })}
@@ -97,20 +111,20 @@ export function FlowMap({ flow, links, names }: { flow: FlowResult; links: { par
 /** Diverging bars centred on 0%: overloaded cells extend left (rose), spare headroom extends right (emerald). */
 export function DivergingBars({ rows, label }: { rows: { label: string; value: number | null; tag: string }[]; label: string }) {
   const vals = rows.map((r) => r.value).filter((v): v is number => v !== null);
-  if (!vals.length) return <div className="text-steel-500 p-4">No data to chart.</div>;
-  const ext = Math.max(0.1, ...vals.map((v) => Math.abs(v))), L = 170, R = W - 120, mid = (L + R) / 2, half = (R - L) / 2, bh = 20, H = rows.length * (bh + 14) + 30;
-  const x = (v: number) => mid + (Math.max(-ext, Math.min(ext, v)) / ext) * half;
-  return <Svg h={H} label={label}>
-    <rect x={L} y={0} width={mid - L} height={H - 22} fill="#FFF1F2" /><rect x={mid} y={0} width={R - mid} height={H - 22} fill="#ECFDF5" />
-    <line x1={mid} x2={mid} y1={0} y2={H - 22} stroke="#0F172A" strokeWidth={1.5} /><text x={mid} y={H - 6} textAnchor="middle" fontSize="10" fill="#0F172A">0%</text>
-    <text x={L + 4} y={H - 6} fontSize="10" fill="#E11D48">← overloaded</text><text x={R - 4} y={H - 6} textAnchor="end" fontSize="10" fill="#059669">spare headroom →</text>
-    {rows.map((r, i) => <g key={r.label} transform={`translate(0,${i * (bh + 14) + 6})`}>
-      <text x={L - 8} y={bh / 2 + 4} textAnchor="end" fontSize="11" fill="#1E293B">{r.label.length > 24 ? r.label.slice(0, 23) + '…' : r.label}</text>
-      {r.value === null ? <text x={mid + 6} y={bh / 2 + 4} fontSize="10" fill="#64748B">no data</text> : <>
-        <rect x={Math.min(mid, x(r.value))} width={Math.abs(x(r.value) - mid)} height={bh} rx={2} fill={r.value < 0 ? '#E11D48' : '#059669'}><title>{`${r.label}: ${(r.value * 100).toFixed(1)}%`}</title></rect>
-        <text x={r.value < 0 ? x(r.value) - 4 : x(r.value) + 4} y={bh / 2 + 4} textAnchor={r.value < 0 ? 'end' : 'start'} fontSize="10" fontWeight={600} fill="#0F172A">{(r.value * 100).toFixed(1)}%</text></>}
-      <text x={R + 8} y={bh / 2 + 4} fontSize="10" fill="#475569">{r.tag}</text></g>)}
-  </Svg>;
+  if (!vals.length) return <Empty />;
+  const ext = Math.max(0.1, ...vals.map((v) => Math.abs(v)));
+  return <div role="img" aria-label={label}>
+    <div className="flex text-[12px] text-slate-500" style={{ paddingLeft: NAME_W }}><span style={{ marginLeft: GUTTER }} className="text-rose-600">← overloaded</span><span className="flex-1 text-center">0%</span><span className="text-emerald-600" style={{ marginRight: 200 }}>spare headroom →</span></div>
+    {rows.map((r, i) => <div key={`${i}-${r.label}`} className="flex items-center" style={{ height: ROW }}>
+      <Name text={r.label} />
+      <div className="relative flex-1" style={{ height: ROW, marginLeft: GUTTER, marginRight: 8 }}>
+        <div className="absolute inset-y-0 left-0 w-1/2" style={{ background: '#FFF1F2' }} /><div className="absolute inset-y-0 right-0 w-1/2" style={{ background: '#ECFDF5' }} />
+        <div className="absolute inset-y-0" style={{ left: '50%', width: 1, background: '#0F172A' }} />
+        {r.value === null ? <div className="absolute" style={{ left: '50%', top: 6, marginLeft: 6 }}><NoData /></div> :
+          <div className="absolute" style={{ top: 8, height: 18, left: r.value < 0 ? `${50 - (Math.min(ext, -r.value) / ext) * 50}%` : '50%', width: `${(Math.min(ext, Math.abs(r.value)) / ext) * 50}%`, background: r.value < 0 ? '#E11D48' : '#059669', borderRadius: 2 }} title={`${r.label}: ${(r.value * 100).toFixed(1)}%`}>
+            <span className="absolute text-[12px] leading-[18px] font-semibold whitespace-nowrap tabular-nums" style={r.value < 0 ? { right: '100%', marginRight: 4 } : { left: '100%', marginLeft: 4 }}>{(r.value * 100).toFixed(1)}%</span></div>}
+      </div>
+      <div className="shrink-0 truncate text-[12px] text-slate-600" style={{ width: 200 }} title={r.tag}>{r.tag}</div></div>)}</div>;
 }
 
 export function Ring({ value, size = 84, label }: { value: number | null; size?: number; label: string }) {

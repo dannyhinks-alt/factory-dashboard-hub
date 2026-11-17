@@ -1,15 +1,7 @@
-import { LEVER_PRESETS, DEFAULT_LIMITS, DEFAULT_LISTS, DEFAULT_SHIFT_HOURS, GATES, PLACEHOLDERS, THEMES } from './constants';
-import type { Asset, Model, Rating } from './types';
-
-export function emptyModel(sourceName = 'New workbook'): Model {
-  return {
-    programmeName: '', contextBrief: '', factoryRoles: {},
-    assets: [], cellLines: [], fpds: [], links: [], levers: LEVER_PRESETS.map((p) => ({ ...p })), scenarios: [], register: [],
-    settings: { plannedWeeks: {}, oeeMode: 'Model', stressTest: false, stressPct: 0.1, limits: { ...DEFAULT_LIMITS }, shiftHours: { ...DEFAULT_SHIFT_HOURS }, defaultWhd: null, lowUtilThreshold: 0.4,
-      confirmed: Object.fromEntries(PLACEHOLDERS.map((p) => [p, false])), lists: structuredClone(DEFAULT_LISTS), defaultComplexity: 'Standard', costEntries: [] },
-    assessor: { cells: [], ratings: {}, evidence: Object.fromEntries(GATES.map((g) => [g, [false, false, false, false, false, false]])) }, dictionary: {}, sourceName,
-  };
-}
+// TEST FIXTURE ONLY: never imported by the app, never shipped. Realistic sample data for unit and browser tests.
+import { GATES, PLACEHOLDERS, THEMES } from '../../src/engine/constants';
+import { emptyModel } from '../../src/engine/blank';
+import type { Asset, Model, Rating } from '../../src/engine/types';
 
 let n = 0;
 const A = (factory: string, cell: string, asset: string, complexity: string, shift: string, machines: number | null, oee: number | null, pOee: number | null, load: number | null, pLoad: number | null, cost: number | null, space: number | null, unc: number | null, va: number | null, enva: number | null): Asset => {
@@ -20,7 +12,7 @@ const A = (factory: string, cell: string, asset: string, complexity: string, shi
 };
 
 export function demoModel(): Model {
-  n = 0; const m = emptyModel('Demo workbook');
+  n = 0; const m = emptyModel('Sample fixture');
   m.settings.plannedWeeks = { HT: 46, DPF: 48 };
   m.settings.defaultWhd = 7.5; m.settings.stressTest = false; m.settings.stressPct = 0.1; m.settings.lowUtilThreshold = 0.4;
   PLACEHOLDERS.forEach((p, i) => (m.settings.confirmed[p] = i < 5));
@@ -48,7 +40,7 @@ export function demoModel(): Model {
   m.settings.lists.Factories = ['HT', 'DPF']; m.settings.lists.Cells = m.cellLines.map((c) => c.cell); m.settings.lists.Assets = m.assets.map((a) => a.asset);
   m.settings.costEntries = [{ id: 'K1', asset: 'Weld Robot 1', cost: 320000, unc: 0.2, raw: '320000' }];
   m.assessor.cells = ['02_HTMF_UTAQW', '04_DPF_WELDG'];
-  m.programmeName = 'Demo programme';
+  m.programmeName = 'Sample programme';
   m.contextBrief = 'HT heat-treats and DPF machines and welds one Product Family of forged parts. We plan 48 weeks a year to check capacity, Passport alignment and flow before committing investment.';
   m.factoryRoles = { HT: 'Heat treatment: vacuum hardening, quench and temper', DPF: 'Machining, welding and final test' };
   m.fpds = fp.map(([name, cell, , hours, volume], i) => ({ id: `FPD-${String(i + 1).padStart(2, '0')}`, name, cell, route: [cell], hours, volume, whd: i === 8 ? null : 7.5, version: 'v1', date: '2026-01-15' }));

@@ -1,5 +1,5 @@
 import { DEFAULT_LIMITS, DEFAULT_SHIFT_HOURS, GATES, LEVER_PRESETS, PLACEHOLDERS } from './constants';
-import { emptyModel } from './demo';
+import { emptyModel } from './blank';
 import type { Asset, CellLine, Fpd, Model } from './types';
 
 type Raw = Record<string, unknown>;

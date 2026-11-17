@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { emptyModel, demoModel } from '../src/engine/demo';
+import { emptyModel } from '../src/engine/blank';
+import { demoModel } from './fixtures/sample';
 import { LEVER_PRESETS, QUICK_PRESETS } from '../src/engine/constants';
 import { normalisePct } from '../src/engine/calc';
 import { testSets } from '../src/engine/sensitivity';

@@ -6,7 +6,7 @@ import { factoriesOf, cells as calcCells } from '../engine/calc';
 import { readiness, scopeChecks, statusReason } from '../engine/overview';
 import { verdictOf } from '../engine/story';
 import { impactMessage } from '../engine/toast';
-import { demoModel, emptyModel } from '../engine/demo';
+import { emptyModel } from '../engine/blank';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
 import { importSummary } from '../engine/importXlsx';
@@ -15,7 +15,7 @@ import type { FocusTarget, Model, ScopeFilters, Severity } from '../engine/types
 import { UPLIFTS } from '../engine/constants';
 import { AppCtx } from '../store';
 import { buildDocx } from '../docxExport';
-import { deserialise, download, fsSupported, pickSaveFile, serialise, writeHandle } from '../persist';
+import { deserialise, readCachedSession, download, fsSupported, pickSaveFile, serialise, writeHandle } from '../persist';
 import type { FsHandle } from '../persist';
 import { Info, Seg } from './kit';
 import { WsDashboard } from './WsDashboard';
@@ -30,7 +30,7 @@ const WS = ['Overall Status', 'Data & Gap Filler', 'Product Flow (FPD)', 'Gates,
 const SEV_COL: Record<Severity, string> = { ERROR: '#c0392b', WARN: '#c98a00', INFO: '#0b5cab' };
 const SESSION_KEY = 'factory-hub.session.v1';
 const DEFAULT_FILTERS: ScopeFilters = { factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' };
-const readSession = (): Model | null => { try { const t = localStorage.getItem(SESSION_KEY); return t ? deserialise(t) : null; } catch { try { localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked */ } return null; } }; // an unreadable cache is dropped, never fatal
+const readSession = (): Model | null => { try { const t = localStorage.getItem(SESSION_KEY); const m = readCachedSession(t); if (t && !m) localStorage.removeItem(SESSION_KEY); return m; } catch { return null; } }; // legacy, demo or unreadable caches are discarded on boot
 const writeSession = (m: Model | null) => { try { if (m) localStorage.setItem(SESSION_KEY, serialise(m)); else localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked or full: session simply is not cached */ } };
 type Save = { kind: 'none' | 'saving' | 'saved' | 'error'; at?: string; msg?: string };
 
@@ -77,7 +77,6 @@ export function App() {
     writeSession(null); wbRef.current = null; setHandle(null); setSave({ kind: 'none' }); setF(DEFAULT_FILTERS); setSevFilter('ALL'); setRuleFilter('');
     setModel(null); setSummary(null); setNotes([]); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1);
   };
-  const loadDemo = () => { if (model && !window.confirm('Loading the demo workbook will REPLACE all data currently loaded. Continue?')) return; load(demoModel(), null); };
   useEffect(() => { if (model) writeSession(model); }, [model]);
   const edit = useCallback((fn: (d: Model) => void, opts?: { silent?: boolean }) => {
     const cur = modelRef.current; if (!cur) return; const d = structuredClone(cur); fn(d); modelRef.current = d;
@@ -131,7 +130,6 @@ export function App() {
         {!model && <span className="mr-auto" />}
         {model && <>
           <button className="btn" onClick={() => fileRef.current?.click()}>Open .xlsx</button>
-          <button className="btn" onClick={loadDemo}>Load Demo Workbook</button>
           <button className="btn" onClick={link}>Link Auto-Save (.json)</button>
           <span data-testid="save-pill" role="status" className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: pill.c }}>{pill.t}</span>
           <button className="btn" onClick={exportX}>Export .xlsx</button>
@@ -162,11 +160,10 @@ export function App() {
           <div className="flex flex-wrap gap-3 justify-center">
             <button className="btn-p" onClick={() => fileRef.current?.click()}>Choose .xlsx workbook</button>
             <button className="btn" onClick={() => load(emptyModel('Blank workbook'), null)}>Start with an empty workbook</button>
-            <button className="btn" onClick={loadDemo}>Load Demo Workbook</button>
-            <button className="btn" onClick={() => jsonRef.current?.click()}>Resume from auto-save (.json)</button>
+              <button className="btn" onClick={() => jsonRef.current?.click()}>Resume from auto-save (.json)</button>
           </div>
           {err && <p role="alert" className="mt-4 text-bad font-semibold">{err}</p>}
-          <p className="text-xs text-steel-500 mt-6">The app starts blank. The demo workbook is optional and only loads when you click its button.</p>
+          <p className="text-xs text-steel-500 mt-6">The app starts blank and holds no sample data. Nothing leaves this computer.</p>
         </div>
       </main></div>;
   }

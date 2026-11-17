@@ -4,7 +4,7 @@ import { shiftHoursFor } from '../engine/calc';
 import { band, calcAsset, factoriesOf, pct } from '../engine/calc';
 import type { Asset, CellLine } from '../engine/types';
 import { useApp } from '../store';
-import { BandChip, Card, FocusRow, Field, NumInput, Seg, Sel, Th, Toggle, Label } from './kit';
+import { BandChip, Card, FocusRow, Field, Info, NumInput, Seg, Sel, Th, Toggle, Label } from './kit';
 
 function ListEditor({ name, items, onChange }: { name: string; items: string[]; onChange: (v: string[]) => void }) {
   const [t, setT] = useState('');
@@ -55,6 +55,7 @@ export function WsData() {
   const S = model.settings;
 
   return <div className="grid gap-4">
+    {!model.assets.length && !model.cellLines.length && <section className="card accent-watch p-4" data-testid="data-onboarding"><b>Nothing loaded yet. Two ways to start:</b><ol className="list-decimal ml-5 mt-1 space-y-1 text-slate-700"><li><b>Import:</b> use <i>Open .xlsx</i> in the top bar for your LEAN CELL DESIGN workbook, or open a saved <i>.json</i> auto-save from the start screen. Every gap is then listed and can be fixed here.</li><li><b>Type it in:</b> add a factory in <i>Central Lists</i> below, press <i>+ Add cell line</i>, then <i>+ Add asset</i> for each machine group.</li></ol></section>}
     <Card title="Guided data & gap filler: cell summary lines with their assets beneath" right={<><button className="btn" onClick={addCell}>+ Add cell line</button><button className="btn-p" onClick={add}>+ Add asset</button></>}>
       <div className="flex flex-wrap gap-3 mb-3">
         {globalFac === 'All' && <Field label="Factory" term="Factory"><Sel label="Factory filter" gap={false} blank="All factories" value={fac === 'All' ? '' : fac} options={factories} onChange={(v) => { setFac(v || 'All'); setCell('All'); setAsset('All'); }} /></Field>}
@@ -62,7 +63,7 @@ export function WsData() {
         <div className="flex flex-col text-[12px] text-slate-700">Asset<select aria-label="Asset filter" className="inp" value={asset} onChange={(e) => setAsset(e.target.value)}><option value="All">All assets</option>{assetsOf.map((a) => <option key={a.id} value={a.id}>{a.asset || '(unnamed)'}</option>)}</select></div>
         <span className="text-xs text-slate-500 self-end">Amber boxes are gaps. Cell lines (grey bands) hold demand and VA / ENVA / NVA / inspection; asset lines hold machines, shifts, OEE and load.</span>
       </div>
-      <div className="overflow-auto max-h-[65vh]"><table className="w-full min-w-[2500px]"><thead>
+      <div className="overflow-auto max-h-[65vh]"><table className="dense w-full min-w-[2300px]"><thead>
         <tr><th className="th" colSpan={3}>CELL › ASSET</th><th className="th bg-sky-100" colSpan={6}>FACTORY MODEL</th><th className="th bg-amber-100" colSpan={6}>PASSPORT (OEE-ADJUSTED)</th><th className="th" colSpan={5}>COST &amp; SPACE</th><th className="th" colSpan={3}>CHECK</th></tr>
         <tr>
         <Th>Factory</Th><Th>Cell</Th><Th>Asset</Th><Th term="Complexity Class">Complexity</Th><Th term="Shift Pattern">Shift</Th><Th>Machines</Th><Th term="OEE">OEE %</Th><Th>Planned losses (h/yr)</Th><Th>Load (h/yr)</Th>
@@ -72,30 +73,30 @@ export function WsData() {
           {g.line ? (() => { const c = g.line; const ci = model.cellLines.findIndex((x) => x.id === c.id); const setC = (fn: (x: CellLine) => void) => edit((d) => { fn(d.cellLines[ci]); });
             return <FocusRow match={focus?.kind === 'cellline' && focus.ref === c.id}>
               <td className="td bg-slate-200" colSpan={3}><div className="flex gap-2 items-center"><span className="chip bg-slate-600">CELL</span>
-                <div className="w-24"><Sel label={`Factory of cell line ${c.cell}`} value={c.factory} options={factoriesOf(model)} onChange={(v) => setC((x) => { x.factory = v; })} /></div>
+                <div className="shrink-0" style={{ minWidth: 96, width: 'auto', overflow: 'visible' }}><select aria-label={`Factory of cell line ${c.cell}`} className={`inp inp-auto ${c.factory ? '' : 'inp-gap'}`} style={{ minWidth: 96, width: 'auto', flexShrink: 0, overflow: 'visible' }} value={c.factory} onChange={(e) => setC((x) => { x.factory = e.target.value; })}><option value="">— select —</option>{factoriesOf(model).map((f) => <option key={f} value={f}>{f}</option>)}</select></div>
                 <input aria-label="Cell line name" className={`inp min-w-[160px] font-semibold ${c.cell ? '' : 'inp-gap'}`} value={c.cell} onChange={(e) => setC((x) => { x.cell = e.target.value; })} /></div></td>
               <td className="td bg-slate-200" colSpan={20}><div className="flex flex-wrap gap-x-3 gap-y-1 items-end">
-                <label className="text-[11px] text-slate-600 flex flex-col">Passport cell<Toggle label={`Passport cell ${c.cell}`} on={c.passport} onText="YES" offText="NO" onChange={(v) => setC((x) => { x.passport = v; })} /></label>
-                <label className="text-[11px] text-slate-600 w-20">Version<input aria-label={`Passport version of ${c.cell}`} className={`inp ${!c.passport || c.version ? '' : 'inp-gap'}`} value={c.version} onChange={(e) => setC((x) => { x.version = e.target.value; })} /></label>
-                <label className="text-[11px] text-slate-600 w-36">Date<input aria-label={`Passport date of ${c.cell}`} type="date" className={`inp ${!c.passport || c.date ? '' : 'inp-gap'}`} value={c.date} onChange={(e) => setC((x) => { x.date = e.target.value; })} /></label>
+                <div className="text-[11px] text-slate-600 flex flex-col"><span className="inline-flex items-center">Passport cell<Info text="YES = Cell is backed by a detailed Cell Design Passport JSON (linking validated cycle times, shift staffing, and equipment capacity). NO = High-level factory estimate only." term="Passport cell" /></span><Toggle small label={`Passport cell ${c.cell}`} on={c.passport} onText="YES" offText="NO" onChange={(v) => setC((x) => { x.passport = v; })} /></div>
+                <div className="text-[11px] text-slate-600 w-20"><span className="inline-flex items-center">Version<Info text="Cell Design Passport revision linked to this cell." term="Version" /></span><input aria-label={`Passport version of ${c.cell}`} className={`inp ${!c.passport || c.version ? '' : 'inp-gap'}`} value={c.version} onChange={(e) => setC((x) => { x.version = e.target.value; })} /></div>
+                <div className="text-[11px] text-slate-600 w-36"><span className="inline-flex items-center">Date<Info text="Baseline or last-verified date for the linked Cell Design Passport." term="Date" /></span><input aria-label={`Passport date of ${c.cell}`} type="date" className={`inp ${!c.passport || c.date ? '' : 'inp-gap'}`} value={c.date} onChange={(e) => setC((x) => { x.date = e.target.value; })} /></div>
                 {([['demandUnits', 'Demand (units/yr)', 'Demand'], ['vaHrs', 'VA h', 'VA hours'], ['envaHrs', 'ENVA h', 'ENVA hours'], ['nvaHrs', 'NVA h', 'NVA hours'], ['inspectionHrs', 'Inspection h', 'Inspection'], ['extraFootprint', 'Extra footprint', 'Extra footprint'], ['opsHrs', 'Operations h', 'Operations hours'], ['leanHrs', 'Lean h', 'Lean hours'], ['footprint', 'Footprint m²', 'Footprint'], ['allocatedSpace', 'Allocated m²', 'Allocated space']] as const).map(([k, head, l]) =>
                   <label key={k} className="text-[11px] text-slate-600 w-24">{head}<NumInput gap={k === 'demandUnits'} label={`${l} of cell ${c.cell}`} value={c[k]} onChange={(v) => setC((x) => { x[k] = v; })} /></label>)}
                 <button className="text-rose-600 ml-auto" aria-label={`Delete cell line ${c.cell}`} onClick={() => edit((d) => { d.cellLines.splice(ci, 1); })}>🗑 cell line</button></div></td></FocusRow>; })()
             : <tr><td className="td bg-amber-100" colSpan={23}><b>{g.cell}</b>: these assets have no cell summary line. <button className="btn ml-2" onClick={() => edit((d) => { const f = d.assets.find((a) => a.cell === g.cell)?.factory ?? ''; d.cellLines.push({ id: `C${Date.now().toString(36)}`, factory: f, cell: g.cell, note: '', vaHrs: null, envaHrs: null, nvaHrs: null, extraFootprint: null, passport: false, version: '', date: '', demandUnits: null, inspectionHrs: null, opsHrs: null, leanHrs: null, footprint: null, allocatedSpace: null }); })}>Create the cell line</button></td></tr>}
           {g.assets.map((a) => { const c = calcAsset(model, a, 'model'); return <FocusRow key={a.id} id={a.id} match={focus?.kind === 'asset' && focus.ref === a.id}>
-          <td className="td w-24"><Sel label={`Factory of ${a.asset}`} value={a.factory} options={factoriesOf(model)} onChange={(v) => upd(a.id, (x) => { x.factory = v; })} /></td>
+          <td className="td w-20"><Sel label={`Factory of ${a.asset}`} value={a.factory} options={factoriesOf(model)} onChange={(v) => upd(a.id, (x) => { x.factory = v; })} /></td>
           <td className="td min-w-[160px]"><input aria-label={`Cell of ${a.asset}`} list="cells-dl" className={`inp ${a.cell ? '' : 'inp-gap'}`} value={a.cell} onChange={(e) => upd(a.id, (x) => { x.cell = e.target.value; })} /></td>
           <td className="td min-w-[180px]"><input aria-label="Asset name" className={`inp ${a.asset ? '' : 'inp-gap'}`} value={a.asset} onChange={(e) => upd(a.id, (x) => { x.asset = e.target.value; })} /></td>
           <td className="td min-w-[140px]"><Sel label={`Complexity of ${a.asset}`} value={a.complexity} options={COMPLEXITY} onChange={(v) => upd(a.id, (x) => { x.complexity = v; })} /></td>
           <td className="td min-w-[135px]"><Sel label={`Shift of ${a.asset}`} value={a.shift} options={shiftOptions} onChange={(v) => upd(a.id, (x) => { x.shift = v; x.modelShift = v; })} /><DefineShift shift={a.shift} /></td>
           {([['machines', 'Machines', false], ['oee', 'OEE', true], ['plannedLosses', 'Planned losses', false], ['loadHrs', 'Load', false]] as const).map(([k, l, p]) =>
-            <td key={k} className="td w-24"><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; if (k in MODEL_OF) (x as unknown as Record<string, number | null>)[MODEL_OF[k]] = v; })} /></td>)}
+            <td key={k} className="td w-20"><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; if (k in MODEL_OF) (x as unknown as Record<string, number | null>)[MODEL_OF[k]] = v; })} /></td>)}
           <td className="td min-w-[135px] bg-slate-50"><Sel label={`Passport shift of ${a.asset}`} gap={false} value={a.passportShift} options={shiftOptions} onChange={(v) => upd(a.id, (x) => { x.passportShift = v; })} /><DefineShift shift={a.passportShift} /></td>
           {([['passportOee', 'Passport OEE', true], ['passportPlannedLosses', 'Passport planned losses', false], ['passportLoadHrs', 'Passport load', false], ['operationQty', 'Operation quantity', false]] as const).map(([k, l, p]) =>
-            <td key={k} className="td w-24 bg-slate-50"><NumInput pct={p} gap={k === 'passportOee' || k === 'passportLoadHrs'} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
+            <td key={k} className="td w-20 bg-slate-50"><NumInput pct={p} gap={k === 'passportOee' || k === 'passportLoadHrs'} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
           <td className="td font-mono bg-slate-50">{pct(a.passportUtilisation ?? calcAsset(model, a, 'passport').effUtil)}</td>
           {([['costPerMachine', 'Cost', false], ['spacePerMachine', 'Space', false], ['costUncPct', 'Cost uncertainty', true], ['vaPct', 'VA', true], ['envaPct', 'ENVA', true], ['inspectionHrs', 'Inspection', false]] as const).map(([k, l, p]) =>
-            <td key={k} className="td w-24"><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
+            <td key={k} className="td w-20"><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
           <td className="td whitespace-nowrap font-mono">{pct(c.headroom)} <BandChip band={band(c.headroom)} /></td>
           <td className="td"><button className="text-rose-600" aria-label={`Delete ${a.asset}`} onClick={() => edit((d) => { d.assets = d.assets.filter((x) => x.id !== a.id); })}>🗑</button></td></FocusRow>; })}
         </Fragment>)}</tbody></table>

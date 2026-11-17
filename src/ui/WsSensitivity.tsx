@@ -26,7 +26,7 @@ export function WsSensitivity() {
   };
   const assetKey = (f: string, c: string, a: string) => `${f}|${c}|${a}`;
   const assetOpts = model.assets.map((a) => assetKey(a.factory, a.cell, a.asset));
-  if (!model.assets.length) return <Empty>No assets yet.</Empty>;
+  if (!model.assets.length) return <Empty><b>No assets yet.</b><br />The pressure list, 3-set lever tester and scenario log fill in once assets with load, machines and shifts are loaded. Import a workbook or add assets in <b>2. Data &amp; Gap Filler</b>.</Empty>;
   return <div className="grid gap-4">
     <Card title="Pressure List" term="Break-Even" right={<span className="text-xs">Worst headroom first; each column is a single-lever break-even</span>}>
       <div className="overflow-auto max-h-[50vh]"><table className="w-full"><thead><tr><Th>#</Th><Th>Factory</Th><Th>Cell</Th><Th>Asset</Th><Th term="Headroom">Headroom</Th><Th>Band</Th><Th term="Break-Even">Load change</Th><Th>OEE needed</Th><Th term="Machines to add">Machines to add</Th><Th>Shift pattern needed</Th></tr></thead>

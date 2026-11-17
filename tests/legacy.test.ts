@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { calendarHours, cells, compareFactory, compareRows, costByFactory, factoriesOf, timeSplit } from '../src/engine/calc';
 import { runChecks } from '../src/engine/checks';
-import { demoModel, emptyModel } from '../src/engine/demo';
+import { emptyModel } from '../src/engine/blank';
+import { demoModel } from './fixtures/sample';
 import { normaliseModel } from '../src/engine/normalise';
 import { executiveTakeaway, factoryOverview, nextActions, readiness, scopeChecks } from '../src/engine/overview';
 import { solve } from '../src/engine/flow';

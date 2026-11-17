@@ -36,7 +36,7 @@ describe('dist-offline/index.html opens on file://', () => {
       await page.waitForSelector('#root *', { timeout: 10_000 });
       expect(await page.evaluate(() => document.getElementById('root')!.innerHTML.length)).toBeGreaterThan(200);
       expect(await page.locator('#boot-error').count()).toBe(0);
-      expect(await page.getByRole('button', { name: 'Load Demo Workbook' }).first().isVisible()).toBe(true);
+      expect(await page.getByRole('button', { name: 'Choose .xlsx workbook' }).first().isVisible()).toBe(true);
       expect(problems).toEqual([]);
     } finally { await browser.close(); }
   }, 60_000);

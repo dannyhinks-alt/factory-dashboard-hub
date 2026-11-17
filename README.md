@@ -12,7 +12,7 @@ Self-contained offline React + TypeScript application that ingests the **LEAN CE
 2. **Open in Microsoft Edge or Chrome:**
    - Double-click `index.html` locally—runs 100% offline with zero internet or CDN calls.
 3. **Ingest & Fill Gaps:**
-   - Drop your `.xlsx` workbook onto the upload panel (or click **Load Demo Workbook** to explore).
+   - Drop your `.xlsx` workbook onto the upload panel  Nothing is pre-loaded: the app always starts blank..
    - Review the **Data Check Gap Summary** (`ERROR`, `WARN`, `INFO`) and click any flagged item to jump straight to that row with dropdowns, toggles, and hover `ⓘ` help popovers.
    - Use **Link Auto-Save (`.json`)** for live network-drive backups, or export back to `.xlsx` / print pack when finished.
 

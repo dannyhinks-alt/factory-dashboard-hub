@@ -26,7 +26,7 @@ export function WsGovernance() {
       <span className="px-3 py-1 rounded font-bold text-white bg-sky-700 text-[14px]" data-testid="active-cell-badge">{active || 'All cells (programme level)'}</span>
       <Sel label="Active cell" gap={false} blank="All cells (programme level)" value={active} options={model.assessor.cells} onChange={setActive} />
       <button className="btn-p" data-testid="add-all-cells" disabled={workbookCells.every((c) => model.assessor.cells.includes(c))} onClick={() => edit((d) => { workbookCells.forEach((c) => { if (!d.assessor.cells.includes(c)) d.assessor.cells.push(c); }); })}>+ Add All Workbook Cells</button>
-      <span className="text-xs text-slate-500">{model.assessor.cells.length} of {workbookCells.length} workbook cells on the Assessor</span></section>
+      <span className="text-xs text-slate-500">{model.assessor.cells.length} of {workbookCells.length} workbook cells on the Assessor</span>{!workbookCells.length && <span className="text-xs text-amber-700" data-testid="gov-onboarding">No cells yet: import a workbook or add cell lines in 2. Data &amp; Gap Filler, then press + Add All Workbook Cells.</span>}</section>
 
     <Card title="Gate Assessor" term="Gate Assessor" right={<span className="text-xs">HS&amp;E themes (3 and 7) rated Not met → gate BLOCKED</span>}>
       <div className="overflow-auto"><table className="w-full min-w-[900px]"><thead><tr><Th>Theme</Th>{GATES.map((g) => <Th key={g}><div>{g}</div><button className="btn mt-1 text-[11px] !py-0.5" data-testid={`mark-met-${g}`} onClick={() => markMet(g)}>Mark Gate Met</button></Th>)}</tr></thead><tbody>

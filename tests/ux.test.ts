@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { demoModel } from '../src/engine/demo';
+import { demoModel } from './fixtures/sample';
 import { RULES, runChecks } from '../src/engine/checks';
 import { PLAIN } from '../src/engine/plainEnglish';
 import { normalisePct, cells } from '../src/engine/calc';
@@ -53,7 +53,7 @@ describe('4-workspace UX logic', () => {
     expect(runChecks(parseWorkbook(wb, 'x').model).perRule.DC26).toBeGreaterThan(0);
   });
   it('programme name, brief and factory roles persist through .xlsx', () => {
-    const back = readWorkbook(exportWorkbook(m, null), 'x').model; expect(back.programmeName).toBe('Demo programme'); expect(back.contextBrief).toBe(m.contextBrief); expect(back.factoryRoles.DPF).toBe(m.factoryRoles.DPF);
+    const back = readWorkbook(exportWorkbook(m, null), 'x').model; expect(back.programmeName).toBe('Sample programme'); expect(back.contextBrief).toBe(m.contextBrief); expect(back.factoryRoles.DPF).toBe(m.factoryRoles.DPF);
   });
   it('per-cell gate ratings and Mark Gate Met', () => {
     const c = structuredClone(m); const cell = '02_HTMF_UTAQW'; for (let t = 1; t <= 7; t++) c.assessor.ratings[ratingKey('Prove', t, cell)] = 'Met';

@@ -1,5 +1,5 @@
 import { calendarHours, cells, costByFactory, factoriesOf, gbp, n1, pct, timeSplit } from '../engine/calc';
-import { executiveTakeaway, factoryOverview, nextActions } from '../engine/overview';
+import { combinedOverview, executiveTakeaway, factoryOverview, nextActions } from '../engine/overview';
 import { fiveLines, scopedCells } from '../engine/story';
 import { useApp } from '../store';
 import { Card, BandChip, Empty, FocusRow, NumInput, Seg, Sel, Th, Label, Field } from './kit';
@@ -33,6 +33,25 @@ export function WsDashboard() {
         <Field label="Site / Programme context brief">
           <textarea aria-label="Site / Programme context brief" rows={3} className="inp" placeholder="What do the factories make? What is the planning horizon? Why are we reviewing capacity, Passport alignment and flow?" value={model.contextBrief} onChange={(e) => edit((d) => { d.contextBrief = e.target.value; }, { silent: true })} /></Field>
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3" data-testid="factory-cards">
+          {factories.length > 0 && (() => { const o = combinedOverview(model); const n = Math.max(1, o.cells.length);
+            return <div data-testid="factory-card-combined" className={`card ${filters.factory === 'All' ? 'ring-2 ring-indigo-500' : ''}`} style={{ borderTop: '4px solid #4F46E5' }}>
+              <div className="p-3 grid gap-2">
+                <div className="flex items-center gap-2"><b className="text-[15px] tracking-wide text-indigo-700">OVERALL COMBINED</b><span className="chip bg-indigo-600">{o.factories} factor{o.factories === 1 ? 'y' : 'ies'}</span>
+                  <button className="btn ml-auto" data-testid="show-all-factories" aria-pressed={filters.factory === 'All'} disabled={filters.factory === 'All'} onClick={() => setFilters({ factory: 'All' })}>Show All Factories</button></div>
+                <div className="text-[12px] text-slate-500">Combined roll-up across all loaded factories</div>
+                <div className="flex gap-3 items-center">
+                  <Ring value={o.utilisation} label="Combined capacity utilisation" />
+                  <div className="grid gap-1 text-[12px] flex-1">
+                    <div className="text-slate-500">Combined capacity utilisation (weighted)</div>
+                    <div className="flex h-3 rounded overflow-hidden" title={`${o.green} GREEN, ${o.amber} AMBER, ${o.red} RED cells`}><span style={{ width: `${(o.green / n) * 100}%`, background: '#059669' }} /><span style={{ width: `${(o.amber / n) * 100}%`, background: '#D97706' }} /><span style={{ width: `${(o.red / n) * 100}%`, background: '#E11D48' }} /></div>
+                    <div data-testid="combined-rag">{o.green} GREEN · {o.amber} AMBER · {o.red} RED cell(s)</div>
+                    <div>{o.machines} machines · {o.assets} assets</div></div></div>
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
+                  <div><div className="text-slate-500">CapEx (£) <span className="text-[10px]">likely range</span></div><b>{gbp(o.likelyLow)} – {gbp(o.likelyHigh)}</b></div>
+                  <div><div className="text-slate-500">Extra footprint</div><b>{n1(o.space, 0)} m²</b></div></div>
+                {o.bottleneck ? <button className="text-left rounded px-2 py-1 bg-slate-50 border border-slate-200 text-[12px] hover:bg-amber-50" onClick={() => goTo({ ws: 2, kind: 'asset', ref: o.bottleneck!.asset.id })}>
+                  Bottleneck: <b>{o.bottleneck.asset.asset}</b> in {o.bottleneck.asset.cell} · headroom <b style={{ color: o.bottleneck.headroom! < 0 ? '#E11D48' : '#059669' }}>{pct(o.bottleneck.headroom)}</b></button> : <div className="text-[12px] text-slate-500">No bottleneck yet: add load, machines and shifts.</div>}
+              </div></div>; })()}
           {factories.map((f) => { const o = factoryOverview(model, f); const sel = filters.factory === f; const worst = o.red ? 'RED' : o.amber ? 'AMBER' : o.cells.length ? 'GREEN' : 'NONE'; const n = Math.max(1, o.cells.length);
             return <div key={f} data-testid={`factory-card-${f}`} className={`card ${ACC[worst]} ${sel ? 'ring-2 ring-sky-500' : ''}`}>
               <div className="p-3 grid gap-2">
@@ -57,13 +76,14 @@ export function WsDashboard() {
 
     <Card title="3-point executive takeaway"><ol className="list-decimal ml-5 space-y-1.5" data-testid="takeaway">{take.map((l, i) => <li key={i}>{l}</li>)}</ol></Card>
 
-    <div className="grid lg:grid-cols-2 gap-4">
+    <div className="flex items-center gap-3 px-3 rounded text-white text-[13px]" style={{ background: VCOL[status.verdict], maxHeight: 44, minHeight: 36 }} role="status" data-testid="verdict" data-verdict={status.verdict}>
+      <b className="text-[14px] tracking-wide">{status.verdict}</b><span className="truncate">{status.reason}</span>
+      <span className="ml-auto whitespace-nowrap">{all.filter((c) => c.band === 'GREEN').length} GREEN · {all.filter((c) => c.band === 'AMBER').length} AMBER · {all.filter((c) => c.band === 'RED').length} RED</span></div>
+
+    <div className="grid gap-4">
       <Card title="What to do next">
         {actions.length === 0 ? <p className="text-emerald-700 font-semibold">Nothing urgent. No critical data errors or overloaded cells in this view.</p> :
           <ol className="grid gap-2" data-testid="next-actions">{actions.map((a, i) => <li key={i} className="flex items-center gap-2 border border-slate-200 rounded p-2"><span className="font-bold text-slate-400">{i + 1}</span><span className="flex-1">{a.text}</span><button className="btn-p" onClick={() => goTo(a.target)}>Go &amp; Fix</button></li>)}</ol>}</Card>
-      <div className="rounded p-3 text-white flex flex-wrap items-center gap-3" style={{ background: VCOL[status.verdict] }} role="status" data-testid="verdict" data-verdict={status.verdict}>
-        <span className="text-2xl font-extrabold tracking-wide">{status.verdict}</span><span className="text-sm">{status.reason}</span>
-        <span className="ml-auto text-sm">{all.filter((c) => c.band === 'GREEN').length} GREEN · {all.filter((c) => c.band === 'AMBER').length} AMBER · {all.filter((c) => c.band === 'RED').length} RED</span></div>
     </div>
 
     <Card title="Cell capacity & headroom" term="Headroom" right={<span className="text-xs">Bars centred on 0%: left = overloaded, right = spare headroom</span>}>

@@ -5,6 +5,11 @@
 html, body, #root { height: 100%; }
 body { @apply font-sans text-[13px]; background: #F1F5F9; color: #0F172A; font-variant-numeric: tabular-nums; }
 @layer components {
+  .dense .inp { height: 28px; padding: 0 6px; font-size: 12.5px; }
+  .dense td, .dense th { font-size: 12.5px; }
+  .dense td.td { padding-top: 2px; padding-bottom: 2px; }
+  .dense tbody tr { height: 34px; }
+  .inp-auto { width: auto; min-width: 96px; flex-shrink: 0; overflow: visible; }
   .card { @apply bg-white rounded-md shadow-sm; border: 1px solid #E2E8F0; }
   .card-h { @apply px-3 py-2 font-semibold flex items-center gap-2 rounded-t; color: #1E293B; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; }
   .accent-good { border-left: 4px solid #059669; } .accent-watch { border-left: 4px solid #D97706; } .accent-bad { border-left: 4px solid #E11D48; } .accent-none { border-left: 4px solid #94A3B8; }

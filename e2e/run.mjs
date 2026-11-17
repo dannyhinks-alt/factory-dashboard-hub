@@ -9,6 +9,7 @@ const file = path.resolve('dist-offline/index.html');
 if (!existsSync(file)) { console.error('Run npm run build:offline first'); process.exit(2); }
 const exe = ['/opt/pw-browsers/chromium', undefined].find((p) => p === undefined || existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
+const loadSample = async (page) => { await page.getByTestId('json-input').setInputFiles('e2e/sample-session.json'); await page.getByTestId('gap-panel').waitFor(); };
 let failed = 0; const ok = (c, m) => { if (c) console.log('  ✓', m); else { failed++; console.error('  ✗ FAIL:', m); } };
 mkdirSync('e2e/out', { recursive: true });
 
@@ -32,7 +33,7 @@ console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe
   ok(await page.getByTestId('dropzone').isVisible(), 'boots to blank state with .xlsx dropzone');
   ok((await page.getByTestId('gap-panel').count()) === 0 && (await page.getByText('HTMF').count()) === 0, 'no demo or legacy data on boot');
   ok(await page.evaluate(() => localStorage.length === 0), 'nothing in localStorage on first boot');
-  ok(await page.getByRole('button', { name: 'Load Demo Workbook' }).isVisible(), 'demo is an explicit secondary button');
+  ok((await page.getByRole('button', { name: /Demo/ }).count()) === 0, 'there is no demo loader anywhere');
   await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
   await page.getByTestId('ws-2').click();
   ok((await page.getByLabel('Asset filter').locator('option').count()) === 1, 'empty workbook has 0 assets');
@@ -40,14 +41,10 @@ console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe
   await page.getByTestId('ws-4').click(); ok((await page.getByTestId('active-cell-badge').innerText()).includes('All cells'), 'empty workbook has no assessed cells');
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
   ok(await page.getByTestId('dropzone').isVisible(), 'Clear / Blank Workspace returns to blank start');
-  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
-  ok(await page.getByTestId('gap-panel').isVisible(), 'demo loads only on explicit click');
+  await loadSample(page);
+  ok(await page.getByTestId('gap-panel').isVisible(), 'a JSON import loads the project');
   await page.reload();
-  ok(await page.getByTestId('gap-panel').isVisible() && (await page.getByTestId('source-name').innerText()) === 'Demo workbook', 'saved session restored from localStorage after reload');
-  // demo button warns when data is loaded
-  let msg = ''; page.once('dialog', async (d) => { msg = d.message(); await d.dismiss(); });
-  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
-  ok(/REPLACE/.test(msg), 'demo button confirms before replacing loaded data');
+  ok(await page.getByTestId('gap-panel').isVisible() && (await page.getByTestId('source-name').innerText()) === 'Sample fixture', 'saved session restored from localStorage after reload');
   // atomic wipe: .xlsx
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Factory', 'Cell', 'Asset'], ['ZZ', 'ONLY_CELL', 'Only Asset']]), 'Data');
@@ -58,7 +55,7 @@ console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe
   ok(cached.assets.length === 1 && cached.fpds.length === 0 && cached.register.length === 0 && cached.scenarios.length === 0 && cached.cellLines.length === 0 && cached.assessor.cells.length === 0, 'localStorage cache rewritten with no stale rows');
   ok((await page.getByText('Vacuum Furnace').count()) === 0, 'no stale demo rows visible');
   // atomic wipe: .json (reduced save of demo while demo is loaded again)
-  page.once('dialog', (d) => d.accept()); await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  await loadSample(page);
   await page.getByRole('button', { name: 'Link Auto-Save (.json)' }).click(); await page.waitForFunction(() => window.__saves.length >= 1);
   const j = JSON.parse(await page.evaluate(() => window.__saves[0])); Object.assign(j.model, { assets: j.model.assets.slice(0, 1), cellLines: [], fpds: [], links: [], register: [], scenarios: [] }); j.model.assessor.cells = []; j.model.settings.lists.Assets = []; j.model.settings.lists.Cells = []; j.model.settings.costEntries = []; j.model.sourceName = 'reduced.json';
   await page.getByTestId('json-input').setInputFiles({ name: 'reduced.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(j)) });
@@ -69,11 +66,11 @@ console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe
   await ctx.close();
 }
 
-console.log('1. Launch + demo workbook');
+console.log('1. Launch + sample project');
 {
   const { ctx, page, errors, requests } = await fresh();
   ok(await page.getByTestId('dropzone').isVisible(), 'drag-and-drop zone visible on launch');
-  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  await loadSample(page);
   ok(await page.getByTestId('gap-panel').isVisible(), 'Gap & Action Summary shown at top');
   ok((await page.getByTestId('rules-table').locator('tbody tr').count()) === 34, 'all 34 rules listed in Data Check table');
   const g0 = await gapCount(page); ok(g0 > 5, `demo flags gaps (${g0})`);
@@ -108,7 +105,7 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   const { ctx, page, errors } = await fresh();
   await page.addInitScript(() => { window.__saves = []; window.showSaveFilePicker = async () => ({ name: 'x.json', createWritable: async () => ({ write: async (t) => window.__saves.push(t), close: async () => {} }) }); });
   await page.reload();
-  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  await loadSample(page);
   await page.getByRole('button', { name: 'Link Auto-Save (.json)' }).click();
   await page.waitForFunction(() => document.querySelector('[data-testid=save-pill]').textContent.startsWith('Saved'));
   ok(true, 'auto-save linked, pill = Saved');
@@ -206,7 +203,7 @@ console.log('6. Exact workbook layout: Passport-only asset row');
     await page.locator('div[aria-label="Source"] button', { hasText: new RegExp(`^${src}$`) }).click();
     const rowTxt = await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText(); ok(/%/.test(rowTxt) && !rowTxt.includes('–\t'), `dashboard headroom computed with Source = ${src}`);
   }
-  ok((await page.locator('svg[aria-label="Time split"]').count()) === 1, 'VA/ENVA/NVA chart drawn from cell-line hours');
+  ok((await page.locator('[aria-label="Time split"]').count()) === 1, 'VA/ENVA/NVA chart drawn from cell-line hours');
   ok((await page.locator('tbody tr', { hasText: 'NO PAIR' }).first().innerText()).includes('CELL_P'), 'Compare shows NO PAIR with Passport numbers');
   ok((await page.getByTestId('gap-item').filter({ hasText: 'no factory-model load to compare against' }).count()) === 1, 'check 11 flagged');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
@@ -216,7 +213,7 @@ console.log('6. Exact workbook layout: Passport-only asset row');
 console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
 {
   const { ctx, page, errors } = await fresh();
-  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  await loadSample(page);
   ok((await page.locator('nav[aria-label=Workspaces] button').count()) === 4, 'navigation has exactly 4 workspaces');
   ok(['1. Overall Status', '2. Data & Gap Filler', '3. Product Flow (FPD)', '4. Gates, Scenarios & Register'].every(async () => true) && (await page.getByTestId('ws-3').innerText()).includes('Product Flow (FPD)'), 'workspace names');
   // programme name: editable, persisted
@@ -238,9 +235,9 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
   // context card + factory cards
   await page.getByTestId('ws-1').click();
   await page.getByLabel('Site / Programme context brief').fill('We make forged parts over 48 weeks.');
-  ok((await page.getByTestId('factory-cards').locator('[data-testid^=factory-card-]').count()) === 2 && (await page.locator('svg[aria-label^="Capacity utilisation of"]').count()) === 2, 'side-by-side factory cards with utilisation rings');
+  ok((await page.getByTestId('factory-cards').locator('[data-testid^=factory-card-]').count()) === 3 && (await page.locator('svg[aria-label*="capacity utilisation" i], svg[aria-label^="Capacity utilisation of"]').count()) === 3, 'OVERALL COMBINED card plus one card per factory, each with a utilisation ring');
   ok((await page.getByTestId('takeaway').locator('li').count()) === 3, '3-point executive takeaway');
-  ok((await page.locator('svg[aria-label="Cell headroom diverging chart"]').count()) === 1, 'diverging headroom chart');
+  ok((await page.locator('[aria-label="Cell headroom diverging chart"]').count()) === 1, 'diverging headroom chart');
   await page.getByRole('button', { name: 'Filter to DPF' }).click();
   ok((await page.getByTestId('factory-filter').locator('button[aria-pressed=true]').innerText()) === 'DPF', 'factory card click filters the whole app');
   await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
@@ -284,7 +281,7 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
     await page.getByTestId('xlsx-input').setInputFiles({ name: 'nolevers.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) }); }
   await page.getByTestId('ws-4').click();
   ok((await page.getByLabel('Set A name').inputValue()) === 'Set A — OEE & Method Uplift' && (await page.getByLabel('Set B shift').inputValue()) === '3 Shifts' && (await page.getByLabel('Set C machines added').inputValue()) === '1', 'Set A/B/C are pre-loaded with the presets');
-  page.once('dialog', (d) => d.accept()); await page.getByRole('button', { name: 'Load Demo Workbook' }).click(); await page.getByTestId('ws-4').click();
+  await loadSample(page); await page.getByTestId('ws-4').click();
   await page.getByLabel('Set A quick preset').selectOption('Stress Test (+20% Demand)');
   ok((await page.getByLabel('Set A load change').inputValue()) === '20', 'quick preset fills the levers');
   await page.getByLabel('Set A quick preset').selectOption('Reset to 0'); ok((await page.getByLabel('Set A load change').inputValue()) === '0', 'Reset to 0');
@@ -298,7 +295,7 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
 
 console.log('8. Legacy / corrupted cached sessions never crash the app');
 for (const [name, cached, expect_] of [
-  ['old save missing keys', JSON.stringify({ model: { assets: [{ id: 'A1', factory: 'DPF', cell: 'C1', asset: 'Mill', shift: '2 Shifts', machines: 2, oee: 0.7, loadHrs: 900 }], settings: { plannedWeeks: {} } } }), 'app'],
+  ['old save missing keys', JSON.stringify({ model: { assets: [{ id: 'A1', factory: 'DPF', cell: 'C1', asset: 'Mill', shift: '2 Shifts', machines: 2, oee: 0.7, loadHrs: 900 }], settings: { plannedWeeks: {} } } }), 'blank'],
   ['garbage text', '{{{ not json', 'blank'], ['wrong shape', JSON.stringify({ model: { assets: 7 } }), 'blank'], ['empty object', '{}', 'blank'],
 ]) {
   const { ctx, page, errors } = await fresh();
@@ -317,6 +314,62 @@ for (const [name, cached, expect_] of [
   for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click();
   ok(errors.length === 0, 'blank workspace: all 4 workspaces render with zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
+}
+
+console.log('9. Overall Combined card, compact charts, dense Data table, tooltips');
+{
+  const { ctx, page, errors } = await fresh();
+  await loadSample(page);
+  const comb = page.getByTestId('factory-card-combined');
+  ok((await comb.innerText()).includes('OVERALL COMBINED') && (await comb.innerText()).includes('Combined roll-up across all loaded factories'), 'combined card title and subtitle');
+  ok(/\d+ GREEN · \d+ AMBER · \d+ RED cell\(s\)/.test(await page.getByTestId('combined-rag').innerText()) && /machines · \d+ assets/.test(await comb.innerText()) && /£[\d,]+ – £[\d,]+/.test(await comb.innerText()) && /m²/.test(await comb.innerText()) && /Bottleneck:/.test(await comb.innerText()), 'combined RAG, machines/assets, CapEx range, footprint and bottleneck');
+  ok((await comb.evaluate((e) => getComputedStyle(e).borderTopColor)) === 'rgb(79, 70, 229)', 'indigo top accent');
+  ok((await page.getByTestId('show-all-factories').isDisabled()), 'Show All Factories is disabled while already showing everything');
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^HT$/ }).click(); ok(!(await page.getByTestId('show-all-factories').isDisabled()), 'Show All Factories enabled under a single-factory filter');
+  await page.getByTestId('show-all-factories').click(); ok((await page.getByTestId('factory-filter').locator('button[aria-pressed=true]').innerText()) === 'All', 'Show All Factories clears the filter');
+  // status strip
+  const sb = await page.getByTestId('verdict').boundingBox(); ok(sb.height <= 44, `status strip is a single compact line (${Math.round(sb.height)}px)`);
+  // no oversized svg bar charts on any screen
+  const barSvgs = async () => page.locator('svg[role=img]').evaluateAll((els) => els.filter((e) => !/utilisation|Gantt|Flow map/i.test(e.getAttribute('aria-label') ?? '')).length);
+  for (const n of [1, 2, 3, 4]) { await page.getByTestId(`ws-${n}`).click(); ok((await barSvgs()) === 0, `workspace ${n}: no scaled svg bar charts`); }
+  await page.getByTestId('ws-1').click();
+  // three-views chart: name column 165px, negative labels never overlap names
+  const chart = page.locator('[aria-label="Model, restated and Passport headroom"]'); const row = chart.locator('> div').first();
+  const nameBox = await row.locator('> div').first().boundingBox(); ok(Math.round(nameBox.width) === 165, `cell name column is 165px (${Math.round(nameBox.width)})`);
+  ok((await row.boundingBox()).height <= 36, 'chart rows are 32–36px');
+  const overlaps = await chart.evaluate((el) => { const bad = []; el.querySelectorAll(':scope > div').forEach((r) => { const name = r.children[0]?.getBoundingClientRect(); r.querySelectorAll('span').forEach((sp) => { const b = sp.getBoundingClientRect(); if (sp.textContent && /^-/.test(sp.textContent.trim()) && name && b.left < name.right - 0.5) bad.push(sp.textContent); }); }); return bad; });
+  ok(overlaps.length === 0, 'negative value labels never overlap cell names' + (overlaps.length ? ': ' + overlaps : ''));
+  const fs = await chart.locator('span').first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs === '12px' || fs === '13px', `chart text stays small on wide screens (${fs})`);
+  await page.setViewportSize({ width: 2200, height: 1000 }); const fs2 = await chart.locator('> div').first().locator('> div').first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs2 === '13px', 'label type is 13px even at 2200px width');
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  // dense data table, unclipped factory selector, tooltips
+  await page.getByTestId('ws-2').click();
+  const sel = page.getByLabel('Factory of cell line 02_HTMF_UTAQW'); const sb2 = await sel.boundingBox(); ok(sb2.width >= 96, `CELL factory selector is at least 96px wide (${Math.round(sb2.width)})`);
+  ok(await sel.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), 'factory code is not truncated');
+  const rowH = await page.locator('tr', { has: page.getByLabel('Machines of Quench Tank', { exact: true }) }).first().boundingBox(); ok(rowH.height >= 30 && rowH.height <= 38, `asset rows are compact (${Math.round(rowH.height)}px)`);
+  const inH = await page.getByLabel('Machines of Quench Tank', { exact: true }).boundingBox(); ok(inH.height <= 28.5, `inline inputs are 28px (${Math.round(inH.height)}px)`);
+  const tg = await page.getByRole('switch', { name: 'Passport cell 02_HTMF_UTAQW' }).boundingBox(); ok(tg.height <= 21, `Passport cell toggle is 20px (${Math.round(tg.height)}px)`);
+  for (const [name, text] of [['Passport cell', 'YES = Cell is backed by a detailed Cell Design Passport JSON'], ['Version', 'Cell Design Passport revision linked to this cell.'], ['Date', 'Baseline or last-verified date for the linked Cell Design Passport.']]) {
+    const btn = page.locator(`button[data-help="${name}"]`).first(); await btn.hover(); ok((await page.getByRole('tooltip').innerText()).includes(text), `ⓘ tooltip on ${name}`); await page.mouse.move(0, 0);
+  }
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : '')); await ctx.close();
+}
+{
+  // blank slate: onboarding on every screen, nothing pre-loaded
+  const { ctx, page, errors } = await fresh();
+  ok((await page.evaluate(() => localStorage.length)) === 0, 'first boot: nothing cached');
+  await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
+  for (const [n, id] of [[1, 'empty-onboarding'], [2, 'data-onboarding'], [4, 'gov-onboarding']]) { await page.getByTestId(`ws-${n}`).click(); ok(await page.getByTestId(id).isVisible(), `workspace ${n} shows its onboarding prompt`); }
+  await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'workspace 3 shows its onboarding prompt');
+  ok(errors.length === 0, 'blank workspace: zero console errors'); await ctx.close();
+}
+{
+  // legacy JSON missing most keys still imports cleanly and a v1 cache is discarded on boot
+  const { ctx, page, errors } = await fresh();
+  const legacy = { model: { assets: [{ id: 'A1', factory: 'XX', cell: 'C1', asset: 'Mill', shift: '2 Shifts', machines: 2, oee: 0.7, loadHrs: 900 }], settings: {} } };
+  await page.getByTestId('json-input').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacy)) }); await page.getByTestId('gap-panel').waitFor();
+  for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click();
+  ok(errors.length === 0, 'legacy JSON imports and every screen renders'); await ctx.close();
 }
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL E2E CHECKS PASSED'); process.exit(failed ? 1 : 0);

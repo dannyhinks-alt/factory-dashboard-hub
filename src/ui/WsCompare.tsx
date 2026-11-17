@@ -9,7 +9,7 @@ export function WsCompare() {
   const { model, focus, filters } = useApp();
   const inScope = (f: string) => filters.factory === 'All' || f === filters.factory;
   const rows = compareRows(model).filter((r) => inScope(r.factory)), fac = compareFactory(model).filter((f) => inScope(f.factory));
-  if (!rows.length) return <Empty>No cells to compare yet.</Empty>;
+  if (!rows.length) return <Empty><b>No cells to compare yet.</b><br />Model vs Passport needs cells with factory-model and Passport figures. Import your workbook, or fill the two blocks in <b>2. Data &amp; Gap Filler</b>.</Empty>;
   const tot = (k: Align) => rows.filter((r) => r.align === k).length;
   return <div className="grid gap-4">
     <Card title="Model vs Passport: alignment summary" right={<span className="text-xs">Variance = Model restated at Passport OEE − Passport headroom</span>}>

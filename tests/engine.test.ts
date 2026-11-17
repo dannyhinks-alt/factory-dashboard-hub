@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { demoModel, emptyModel } from '../src/engine/demo';
+import { emptyModel } from '../src/engine/blank';
+import { demoModel } from './fixtures/sample';
 import { RULES, runChecks } from '../src/engine/checks';
 import { runSelfTest } from '../src/engine/selftest';
 import { calcAsset, cells, costByFactory, compareRows } from '../src/engine/calc';

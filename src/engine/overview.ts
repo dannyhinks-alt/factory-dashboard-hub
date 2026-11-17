@@ -87,3 +87,16 @@ export function nextActions(m: Model, issues: Issue[], f: ScopeFilters): NextAct
   for (const i of issues.filter((x) => x.severity === 'WARN' && x.target)) { if (out.length >= 3) break; out.push({ text: `Tidy up: ${i.message}`, target: i.target!, kind: 'data' }); }
   return out.slice(0, 3);
 }
+
+export interface CombinedOverview extends Omit<FactoryOverview, 'factory' | 'role'> { factories: number }
+/** Roll-up across every loaded factory: weighted utilisation, summed CapEx range and footprint, single worst bottleneck. */
+export function combinedOverview(m: Model): CombinedOverview {
+  const fs = factoriesOf(m); const ov = fs.map((f) => factoryOverview(m, f));
+  const ok = m.assets.map((a) => calcAsset(m, a, 'model')).filter((c) => c.complete);
+  const load = ok.reduce((s, c) => s + c.load!, 0), cap = ok.reduce((s, c) => s + c.avail! * c.oee!, 0);
+  const hs = ov.map((o) => o.bottleneck).filter((b): b is AssetCalc => !!b);
+  return { factories: fs.length, cells: ov.flatMap((o) => o.cells), green: sum(ov, 'green'), amber: sum(ov, 'amber'), red: sum(ov, 'red'), machines: sum(ov, 'machines'), assets: sum(ov, 'assets'),
+    utilisation: cap > 0 ? load / cap : null, capex: sum(ov, 'capex'), likelyLow: sum(ov, 'likelyLow'), likelyHigh: sum(ov, 'likelyHigh'), space: sum(ov, 'space'),
+    bottleneck: hs.length ? hs.reduce((a, b) => (b.headroom! < a.headroom! ? b : a)) : null };
+}
+const sum = (ov: FactoryOverview[], k: 'green' | 'amber' | 'red' | 'machines' | 'assets' | 'capex' | 'likelyLow' | 'likelyHigh' | 'space') => ov.reduce((s, o) => s + o[k], 0);
