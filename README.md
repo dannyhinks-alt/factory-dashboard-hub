@@ -22,7 +22,7 @@ Self-contained offline React + TypeScript application that ingests the **LEAN CE
 
 To avoid branch conflicts and Pull Request overhead on mobile/web:
 
-1. **New Repo Rule (`://github.com`):**
+1. **New Repo Rule (`https://github.com`):**
    - Always tick **Add a README file** when creating a repository so `main` is initialised as the permanent default branch immediately.
 2. **Model & Effort Selection (`claude.ai/code`):**
    - **Initial multi-file build:** `Sonnet 5.5` + `Medium` effort (`Ultracode` ON).
@@ -56,3 +56,21 @@ npm run dev              # Start local dev server
 npm test                 # Run unit & calculation engine tests
 npm run build:offline    # Build standalone dist-offline/index.html
 ```
+
+---
+
+## 5. Workbook Tabs
+Dashboard, Compare, Data, Assessor, FPD, Lead time, Sensitivity, Levers, Scenarios, Register, Settings, Dictionary. Missing tabs, blank rows and placeholder text ("TBC", "[enter]") are tolerated and become Data Check gaps. Input tabs are read by header name (`src/engine/xlsx.ts`; the `Data` tab by `src/engine/importXlsx.ts`, using the group banner as well); Dashboard, Compare and Sensitivity are regenerated on export. Tabs the app does not own are preserved.
+
+---
+
+## 6. Key Definitions
+- Headroom = 1 − effective utilisation ÷ class limit; effective utilisation = load ÷ ((planned weeks × shift hours × machines − planned losses) × OEE).
+- GREEN ≥ 10%, AMBER 0–10%, RED < 0%. Verdict: BAD if any RED, WATCH if any AMBER or ERROR, else GOOD.
+- Process lead time = hours ÷ volume ÷ working hours per day; WIP = (volume ÷ planned weeks × 5) × lead time.
+- Register score = time × cost impact; HIGH ≥ 15, MEDIUM ≥ 8.
+
+---
+
+## 7. Layout
+`src/engine` is pure TypeScript (calc, flow, checks, sensitivity, governance, selftest, xlsx, importXlsx). `src/ui` holds the six workspaces. Tests are in `tests/` and `e2e/`.
