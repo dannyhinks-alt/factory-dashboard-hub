@@ -147,8 +147,13 @@ console.log('6. Exact workbook layout: Passport-only asset row');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x'], [], banner, head, pad(['DPF', 'CELL_P', '', '', 300, '', '', '', '', '', '', '', '', '', '', '', '', 1200, 500, 300]), pad(['DPF', 'CELL_P', 'Press 1', '', '', 2, 'Standard', '', '', '', '', 0.6, 0.68, '2 Shifts', 0, 1909, 3])]), 'Data');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Label', 'Value'], ['Planned Weeks DPF', 46]]), 'Settings');
   await page.getByTestId('xlsx-input').setInputFiles({ name: 'passport-only.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) });
+  ok((await page.getByTestId('sum-Passport-Cells').innerText()) === '1' && (await page.getByTestId('sum-Passport-Assets').innerText()) === '1' && (await page.getByTestId('sum-Model-Assets').innerText()) === '0' && (await page.getByTestId('sum-Model-Cells').innerText()) === '0', 'Import Summary banner shows model/passport cell and asset counts');
   await page.getByTestId('ws-2').click();
   ok((await page.getByLabel('Machines of Press 1', { exact: true }).inputValue()) === '2' && (await page.getByLabel('Shift of Press 1', { exact: true }).inputValue()) === '2 Shifts' && (await page.getByLabel('OEE of Press 1', { exact: true }).inputValue()) === '68' && (await page.getByLabel('Planned losses of Press 1', { exact: true }).inputValue()) === '0' && (await page.getByLabel('Load of Press 1', { exact: true }).inputValue()) === '1909', 'Data shows Machines 2, 2 Shifts, OEE 68%, losses 0, load 1909');
+  const shiftOpts = await page.getByLabel('Shift of Press 1', { exact: true }).locator('option').allInnerTexts();
+  ok(['1 Shift', '2 Shifts', '3 Shifts', '4 Shifts', '5 Shifts', '6 Shifts', 'Continuous 24/7', '2 Shifts + Sat', '3 Shifts + Sat'].every((x) => shiftOpts.includes(x)), 'Shift dropdown offers 1–6 Shifts, Continuous and Saturday patterns');
+  ok((await page.locator('td', { has: page.getByLabel('Shift of Press 1', { exact: true }) }).boundingBox()).width >= 135, 'Shift column wide enough for "2 Shifts + Sat"');
+  ok((await page.locator('input[aria-label="Cell line name"]').count()) === 1 && (await page.getByLabel('Shift of CELL_P').count()) === 0, 'cell line row has no Shift/Machines/OEE/Load inputs');
   for (const l of ['Machines of Press 1', 'OEE of Press 1', 'Planned losses of Press 1', 'Load of Press 1', 'Shift of Press 1']) ok(!((await page.getByLabel(l, { exact: true }).getAttribute('class')) ?? '').includes('inp-gap'), `no false gap on ${l}`);
   await page.getByTestId('ws-1').click();
   for (const src of ['Both', 'Passport', 'Model']) {

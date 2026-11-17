@@ -1,9 +1,9 @@
 export const FACTORY_DEFAULTS = ['HT', 'DPF'];
 export const COMPLEXITY = ['Simple', 'Standard', 'Complex', 'Precision'] as const;
 export const DEFAULT_LIMITS: Record<string, number> = { Simple: 0.8, Standard: 0.65, Complex: 0.5, Precision: 0.35 };
-export const SHIFTS = ['1 Shift', '2 Shifts', '3 Shifts', 'Continuous 24/7', '2 Shifts + Sat', '3 Shifts + Sat'] as const;
+export const SHIFTS = ['1 Shift', '2 Shifts', '3 Shifts', '4 Shifts', '5 Shifts', '6 Shifts', 'Continuous 24/7', '2 Shifts + Sat', '3 Shifts + Sat'] as const;
 export const DEFAULT_SHIFT_HOURS: Record<string, number> = {
-  '1 Shift': 40, '2 Shifts': 80, '3 Shifts': 120, 'Continuous 24/7': 168, '2 Shifts + Sat': 90, '3 Shifts + Sat': 130,
+  '1 Shift': 40, '2 Shifts': 80, '3 Shifts': 120, '4 Shifts': 160, '5 Shifts': 200, '6 Shifts': 240, 'Continuous 24/7': 168, '2 Shifts + Sat': 90, '3 Shifts + Sat': 130,
 };
 export const GATES = ['Define', 'Concept', 'Design', 'Prove', 'Launch', 'Consolidation'] as const;
 export const THEMES = [

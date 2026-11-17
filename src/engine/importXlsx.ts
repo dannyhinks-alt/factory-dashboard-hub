@@ -92,7 +92,7 @@ export interface DataSheetResult { assets: Asset[]; cellLines: CellLine[]; mappe
 export function parseDataSheet(rows: Cell[][]): DataSheetResult {
   const none: DataSheetResult = { assets: [], cellLines: [], mapped: {}, hadBanner: false };
   let hr = -1;
-  for (let r = 0; r < Math.min(rows.length, 40); r++) {
+  for (let r = 0; r < Math.min(rows.length, 15); r++) { // banner + header sit within the first 15 rows
     const keys = (rows[r] ?? []).map(headKey);
     if (keys.includes('factory') && keys.includes('cell') && keys.some((k) => k.startsWith('asset') && !k.startsWith('assetline'))) { hr = r; break; }
   }
@@ -168,4 +168,14 @@ export function dataSheetAoa(m: Model): unknown[][] {
   m.cellLines.forEach((c) => { rows.push(lineRow(c)); m.assets.filter((a) => a.cell === c.cell && !placed.has(a.id)).forEach((a) => { placed.add(a.id); rows.push(assetRow(a)); }); });
   m.assets.filter((a) => !placed.has(a.id)).forEach((a) => rows.push(assetRow(a)));
   return [['DATA: FACTORY > CELL > ASSET'], ['A blank Asset makes the row a cell line. Edit here or in the app.'], banner, header, ...rows];
+}
+
+export interface ImportSummary { modelCells: number; passportCells: number; modelAssets: number; passportAssets: number; cellLines: number; assetLines: number }
+/** Counts shown in the Import Summary banner. A model/passport asset is one with figures in that block. */
+export function importSummary(m: Model): ImportSummary {
+  const isModel = (a: Asset) => a.modelLoad !== null || a.modelOee !== null || a.modelShift !== '' || a.modelPlannedLosses !== null;
+  const isPassport = (a: Asset) => a.passportLoadHrs !== null || a.passportOee !== null || a.passportShift !== '' || a.passportPlannedLosses !== null || a.passportUtilisation !== null;
+  const modelA = m.assets.filter(isModel), passA = m.assets.filter(isPassport);
+  const passCells = new Set<string>([...m.cellLines.filter((c) => c.passport).map((c) => c.cell), ...passA.map((a) => a.cell)]);
+  return { modelCells: new Set(modelA.map((a) => a.cell)).size, passportCells: passCells.size, modelAssets: modelA.length, passportAssets: passA.length, cellLines: m.cellLines.length, assetLines: m.assets.length };
 }

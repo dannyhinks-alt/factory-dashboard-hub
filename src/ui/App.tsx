@@ -5,6 +5,8 @@ import { RULES, runChecks } from '../engine/checks';
 import { demoModel } from '../engine/demo';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
+import { importSummary } from '../engine/importXlsx';
+import type { ImportSummary } from '../engine/importXlsx';
 import type { FocusTarget, Model, ScopeFilters, Severity } from '../engine/types';
 import { UPLIFTS } from '../engine/constants';
 import { AppCtx } from '../store';
@@ -35,6 +37,7 @@ export function App() {
   const [handle, setHandle] = useState<FsHandle | null>(null);
   const [save, setSave] = useState<Save>({ kind: 'none' });
   const [err, setErr] = useState('');
+  const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [sevFilter, setSevFilter] = useState<Severity | 'ALL'>('ALL');
   const [ruleFilter, setRuleFilter] = useState('');
@@ -48,11 +51,11 @@ export function App() {
   const dict = useMemo(() => ({ ...DICTIONARY, ...(model?.dictionary ?? {}) }), [model?.dictionary]);
   const help = useCallback((t: string) => dict[t] ?? DICTIONARY[t] ?? '', [dict]);
 
-  const load = useCallback((m: Model, wb: XLSX.WorkBook | null, warn: string[] = []) => { wbRef.current = wb; setModel(m); setNotes(warn); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1); setGapOpen(true); }, []);
+  const load = useCallback((m: Model, wb: XLSX.WorkBook | null, warn: string[] = [], sum: ImportSummary | null = null) => { setSummary(sum); wbRef.current = wb; setModel(m); setNotes(warn); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1); setGapOpen(true); }, []);
   const edit = useCallback((fn: (d: Model) => void) => { setModel((cur) => { if (!cur) return cur; const d = structuredClone(cur); fn(d); return d; }); setDirty(true); setVersion((v) => v + 1); }, []);
 
   const openXlsx = async (file: File) => {
-    try { const r = readWorkbook(await file.arrayBuffer(), file.name); load(r.model, r.wb, r.warnings); }
+    try { const r = readWorkbook(await file.arrayBuffer(), file.name); load(r.model, r.wb, r.warnings, importSummary(r.model)); }
     catch (e) { setErr(`Could not read "${file.name}" as an .xlsx workbook: ${(e as Error).message}`); }
   };
   const openJson = async (file: File) => { try { load(deserialise(await file.text()), null, ['Loaded from auto-save file.']); } catch (e) { setErr((e as Error).message); } };
@@ -144,6 +147,11 @@ export function App() {
                 {RULES.map((r, i) => <tr key={r.id} className={checks.perRule[r.id] ? 'bg-amber-50' : ''}><td className="td">{i + 1}</td><td className="td"><span className="chip" style={{ background: SEV_COL[r.severity] }}>{r.severity}</span></td><td className="td">{r.title}</td><td className="td">{r.where}</td>
                   <td className="td"><button className="underline text-accent" disabled={!checks.perRule[r.id]} onClick={() => { setRuleFilter(ruleFilter === r.id ? '' : r.id); setGapOpen(true); }}>{checks.perRule[r.id]}</button></td></tr>)}</tbody></table></div></details>
           </section>
+          {summary && <section className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1" data-testid="import-summary" aria-label="Import summary">
+            <b>Import summary</b>
+            {([['Model Cells', summary.modelCells], ['Passport Cells', summary.passportCells], ['Model Assets', summary.modelAssets], ['Passport Assets', summary.passportAssets]] as const).map(([l, v]) => <span key={l}>{l}: <b data-testid={`sum-${l.replace(' ', '-')}`}>{v}</b></span>)}
+            <span className="text-xs text-steel-500">{summary.cellLines} cell line(s) and {summary.assetLines} asset line(s) read from the Data tab</span>
+            <button className="btn ml-auto" onClick={() => setSummary(null)}>Dismiss</button></section>}
           <nav className="bg-steel-100 border-b border-steel-200 px-4 flex gap-1 overflow-x-auto" aria-label="Workspaces">
             {WS.map((w, i) => <button key={w} onClick={() => setWs(i + 1)} aria-current={ws === i + 1} data-testid={`ws-${i + 1}`} className={`px-3 py-2 whitespace-nowrap border-b-2 ${ws === i + 1 ? 'border-accent font-bold text-accent bg-white' : 'border-transparent text-steel-700 hover:bg-steel-50'}`}>{i + 1}. {w}</button>)}
           </nav>

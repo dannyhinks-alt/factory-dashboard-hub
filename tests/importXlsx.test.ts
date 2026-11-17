@@ -59,3 +59,33 @@ describe('exact Data-sheet layout', () => {
     const a = m.assets[0]; expect(runChecks(m).issues.some((i) => /machines|shift|OEE|load/i.test(i.message) && ['DC03', 'DC07', 'DC10', 'DC12'].includes(i.rule) && i.target?.ref === a.id && i.rule !== 'DC03')).toBe(false);
   });
 });
+
+import { importSummary } from '../src/engine/importXlsx';
+import { SHIFTS } from '../src/engine/constants';
+
+describe('column variants and import summary', () => {
+  const rowsWith = (qtyHeader: string) => {
+    const head = [...HEAD]; head[5] = qtyHeader;
+    return [['t'], [], BANNER, head, CELL, ASSET, pad(['HT', '02_HTMF_UTAQW', 'Quench', '', '', 1, 'Standard', '3 Shifts', 0.85, 0, 2400, '', 0.7, '3 Shifts', 0, 2330])];
+  };
+  it('Quantity, Machines and No. of machines all map to machines', () => {
+    for (const h of ['Quantity', 'Machines', 'No. of machines']) { const r = parseDataSheet(rowsWith(h)); expect(r.assets.map((a) => a.machines), h).toEqual([2, 1]); }
+  });
+  it('model and passport values stay separate and the model value wins as active', () => {
+    const q = parseDataSheet(rowsWith('Quantity')).assets[1];
+    expect([q.modelOee, q.passportOee, q.oee, q.modelLoad, q.passportLoadHrs, q.loadHrs, q.shift]).toEqual([0.85, 0.7, 0.85, 2400, 2330, 2400, '3 Shifts']);
+  });
+  it('finds the banner and header within the first 15 rows only', () => {
+    const lead = Array.from({ length: 10 }, () => ['']); expect(parseDataSheet([...lead, ...rowsWith('Quantity')]).assets.length).toBe(2);
+    const far = Array.from({ length: 20 }, () => ['']); expect(parseDataSheet([...far, ...rowsWith('Quantity')]).assets.length).toBe(0);
+  });
+  it('import summary counts model and passport cells and assets', () => {
+    const m = readWorkbook(XLSX.write(book(), { type: 'array', bookType: 'xlsx' }), 'x').model;
+    expect(importSummary(m)).toMatchObject({ modelCells: 0, passportCells: 1, modelAssets: 0, passportAssets: 1, cellLines: 1, assetLines: 1 });
+    const two = parseDataSheet(rowsWith('Quantity')); const mm = { ...m, assets: two.assets, cellLines: two.cellLines };
+    expect(importSummary(mm)).toMatchObject({ modelCells: 1, passportCells: 1, modelAssets: 1, passportAssets: 2 });
+  });
+  it('shift pattern list supports 1 to 6 shifts, continuous and Saturday patterns', () => {
+    for (const s of ['1 Shift', '2 Shifts', '3 Shifts', '4 Shifts', '5 Shifts', '6 Shifts', 'Continuous 24/7', '2 Shifts + Sat', '3 Shifts + Sat']) expect(SHIFTS as readonly string[]).toContain(s);
+  });
+});
