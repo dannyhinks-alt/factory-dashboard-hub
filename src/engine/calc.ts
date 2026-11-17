@@ -35,7 +35,8 @@ export function shiftHoursFor(m: Model, shift: string): number | null {
   const v = m.settings.shiftHours[shift];
   return num(v) ?? (shift in DEFAULT_SHIFT_HOURS && m.settings.shiftHours[shift] === undefined ? DEFAULT_SHIFT_HOURS[shift] : null);
 }
-export function limitFor(m: Model, cls: string): number | null {
+export function limitFor(m: Model, clsIn: string): number | null {
+  const cls = clsIn || m.settings.defaultComplexity;
   const v = m.settings.limits[cls];
   return num(v) ?? (v === undefined ? num(DEFAULT_LIMITS[cls]) : null);
 }

@@ -29,6 +29,7 @@ console.log('1. Launch + demo workbook');
   ok(await page.getByTestId('dropzone').isVisible(), 'drag-and-drop zone visible on launch');
   await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
   ok(await page.getByTestId('gap-panel').isVisible(), 'Gap & Action Summary shown at top');
+  ok((await page.getByTestId('rules-table').locator('tbody tr').count()) === 34, 'all 34 rules listed in Data Check table');
   const g0 = await gapCount(page); ok(g0 > 5, `demo flags gaps (${g0})`);
   ok(['GOOD', 'WATCH', 'BAD'].includes(await page.getByTestId('verdict').getAttribute('data-verdict')), 'verdict banner');
   ok((await page.getByTestId('story').locator('li').count()) === 5, 'five-line story');
@@ -38,7 +39,7 @@ console.log('1. Launch + demo workbook');
   await page.screenshot({ path: 'e2e/out/dashboard.png' });
 
   console.log('2. Gap-first jump + gap fill');
-  const item = page.getByTestId('gap-item').filter({ hasText: 'Passport OEE is blank' }).first();
+  const item = page.getByTestId('gap-item').filter({ hasText: 'no asset-specific Passport OEE' }).first();
   await item.click();
   ok(await page.getByTestId('workspace-2').isVisible(), 'click jumps to Workspace 2');
   const inp = page.getByLabel('Passport OEE of Temper Oven');
@@ -86,7 +87,7 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   ok(true, 'uplift case switch');
   // circular loop
   await page.getByRole('button', { name: '+ Add link' }).click();
-  const last = page.locator('tbody').nth(1).locator('tr').last();
+  const last = page.locator('tr', { has: page.getByLabel('Parent FPD') }).last();
   await last.getByLabel('Parent FPD').selectOption('FPD-10'); await last.getByLabel('Child FPD').selectOption('FPD-01');
   ok(await page.getByTestId('cycle-alert').isVisible(), 'circular loop detected');
   await page.screenshot({ path: 'e2e/out/flow.png', fullPage: true });
@@ -113,14 +114,14 @@ console.log('5. Partial .xlsx ingestion, then re-import of the export');
 {
   const { ctx, page, errors } = await fresh();
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['LEAN CELL DESIGN'], [], ['Factory', 'Cell', 'Asset', 'Complexity Class', 'Machines', 'OEE %', 'Annual Load (h)'], ['HT', '02_HTMF_UTAQW', 'Furnace', '', 2, 'TBC', ''], ['DPF', '04_DPF_WELDG', 'Robot', 'Complex', '', 0.7, 5000]]), 'Data');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['LEAN CELL DESIGN'], [], ['Factory', 'Cell', 'Asset', 'Complexity Class', 'Machines', 'OEE %', 'Annual Load (h)'], ['HT', '02_HTMF_UTAQW', 'Furnace', 'Exotic', 2, 'TBC', ''], ['DPF', '04_DPF_WELDG', 'Robot', 'Complex', '', 0.7, 5000]]), 'Data');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Label', 'Value'], ['Planned Weeks HT', '[enter]']]), 'Settings');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Notes'], ['unrelated tab']]), 'Cover');
   await page.getByTestId('xlsx-input').setInputFiles({ name: 'partial.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) });
   await page.getByTestId('gap-panel').waitFor();
   ok((await page.getByTestId('source-name').innerText()) === 'partial.xlsx', 'partial workbook ingested');
-  const errs = Number((await page.getByTestId('sev-ERROR').innerText()).split(' ')[0]); ok(errs >= 5, `ERROR gaps flagged (${errs})`);
-  await page.getByTestId('gap-item').filter({ hasText: 'Complexity Class is blank' }).first().click();
+  const errs = Number((await page.getByTestId('sev-ERROR').innerText()).split(' ')[0]); ok(errs >= 4, `ERROR gaps flagged (${errs})`);
+  await page.getByTestId('gap-item').filter({ hasText: 'is not on the class table' }).first().click();
   await page.getByLabel('Complexity of Furnace').selectOption('Precision');
   ok((await page.getByLabel('Complexity of Furnace').inputValue()) === 'Precision', 'dropdown gap-fill');
   for (const n of [1, 2, 3, 4, 5, 6]) { await page.getByTestId(`ws-${n}`).click(); }

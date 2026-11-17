@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as XLSX from 'xlsx';
 import { DICTIONARY } from '../engine/constants';
-import { runChecks } from '../engine/checks';
+import { RULES, runChecks } from '../engine/checks';
 import { demoModel } from '../engine/demo';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
@@ -37,6 +37,7 @@ export function App() {
   const [err, setErr] = useState('');
   const [notes, setNotes] = useState<string[]>([]);
   const [sevFilter, setSevFilter] = useState<Severity | 'ALL'>('ALL');
+  const [ruleFilter, setRuleFilter] = useState('');
   const [gapOpen, setGapOpen] = useState(true);
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -117,7 +118,7 @@ export function App() {
       </main></div>;
   }
 
-  const shown = checks.issues.filter((i) => sevFilter === 'ALL' || i.severity === sevFilter);
+  const shown = checks.issues.filter((i) => (sevFilter === 'ALL' || i.severity === sevFilter) && (!ruleFilter || i.rule === ruleFilter));
   const order: Record<Severity, number> = { ERROR: 0, WARN: 1, INFO: 2 };
   const sorted = [...shown].sort((a, b) => order[a.severity] - order[b.severity]);
   return (
@@ -138,6 +139,10 @@ export function App() {
                 <span className="chip shrink-0" style={{ background: SEV_COL[i.severity] }}>{i.severity}</span><span className="text-steel-500 shrink-0 w-10">{i.rule}</span><span>{i.message}</span>
                 {i.target && <span className="ml-auto text-accent shrink-0">Go to → WS{i.target.ws}</span>}</button></li>)}
             </ul>}
+            <details className="mt-2" data-testid="rules-table"><summary className="cursor-pointer text-xs font-semibold text-steel-700">All 34 Data Check rules{ruleFilter ? ` (filtered to ${ruleFilter})` : ''}</summary>
+              <div className="max-h-56 overflow-auto border border-steel-200 rounded mt-1"><table className="w-full text-xs"><thead><tr><th className="th">#</th><th className="th">Severity</th><th className="th">Rule</th><th className="th">Where</th><th className="th">Flags</th></tr></thead><tbody>
+                {RULES.map((r, i) => <tr key={r.id} className={checks.perRule[r.id] ? 'bg-amber-50' : ''}><td className="td">{i + 1}</td><td className="td"><span className="chip" style={{ background: SEV_COL[r.severity] }}>{r.severity}</span></td><td className="td">{r.title}</td><td className="td">{r.where}</td>
+                  <td className="td"><button className="underline text-accent" disabled={!checks.perRule[r.id]} onClick={() => { setRuleFilter(ruleFilter === r.id ? '' : r.id); setGapOpen(true); }}>{checks.perRule[r.id]}</button></td></tr>)}</tbody></table></div></details>
           </section>
           <nav className="bg-steel-100 border-b border-steel-200 px-4 flex gap-1 overflow-x-auto" aria-label="Workspaces">
             {WS.map((w, i) => <button key={w} onClick={() => setWs(i + 1)} aria-current={ws === i + 1} data-testid={`ws-${i + 1}`} className={`px-3 py-2 whitespace-nowrap border-b-2 ${ws === i + 1 ? 'border-accent font-bold text-accent bg-white' : 'border-transparent text-steel-700 hover:bg-steel-50'}`}>{i + 1}. {w}</button>)}

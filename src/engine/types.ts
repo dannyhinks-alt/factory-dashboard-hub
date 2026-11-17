@@ -22,7 +22,26 @@ export interface Asset {
   costUncPct: number | null;
   vaPct: number | null;
   envaPct: number | null;
+  inspectionHrs: number | null; // must sit on the cell line, flagged if typed here
+  plannedLossPct: number | null;
 }
+
+export interface CellLine {
+  id: string;
+  factory: string;
+  cell: string;
+  passport: boolean;
+  version: string;
+  date: string;
+  demandUnits: number | null;
+  inspectionHrs: number | null;
+  opsHrs: number | null;
+  leanHrs: number | null;
+  footprint: number | null;
+  allocatedSpace: number | null;
+}
+
+export interface CostEntry { id: string; asset: string; cost: number | null; unc: number | null; raw: string }
 
 export interface Fpd {
   id: string; // FPD-01
@@ -31,6 +50,8 @@ export interface Fpd {
   hours: number | null;
   volume: number | null;
   whd: number | null;
+  version: string;
+  date: string;
 }
 
 export interface Link {
@@ -64,6 +85,7 @@ export interface Scenario {
   machinesAdd: number;
   shift: string;
   note: string;
+  reroute: number; // hours re-routed (+in / −out); each scenario must net to zero
 }
 
 export interface RegItem {
@@ -76,6 +98,7 @@ export interface RegItem {
   due: string; // ISO yyyy-mm-dd or ''
   status: string;
   link: string;
+  probability: number | null;
 }
 
 export interface Settings {
@@ -89,15 +112,19 @@ export interface Settings {
   lowUtilThreshold: number | null;
   confirmed: Record<string, boolean>;
   lists: Record<string, string[]>;
+  defaultComplexity: string;
+  costEntries: CostEntry[];
 }
 
 export interface Assessor {
   ratings: Record<string, Rating>; // `${gate}|${theme}`
   evidence: Record<string, boolean[]>; // gate -> 6 flags
+  cells: string[]; // cells listed on the Assessor
 }
 
 export interface Model {
   assets: Asset[];
+  cellLines: CellLine[];
   fpds: Fpd[];
   links: Link[];
   levers: LeverSet[];
@@ -121,7 +148,7 @@ export interface ScopeFilters {
 
 export interface FocusTarget {
   ws: number;
-  kind: 'asset' | 'cell' | 'fpd' | 'link' | 'risk' | 'setting' | 'assessor' | 'lever' | 'scenario' | 'factory' | 'list';
+  kind: 'asset' | 'cellline' | 'cell' | 'fpd' | 'link' | 'risk' | 'setting' | 'assessor' | 'lever' | 'scenario' | 'factory' | 'list';
   ref: string;
 }
 

@@ -28,13 +28,19 @@ export function WsGovernance() {
       <details className="mt-3"><summary className="cursor-pointer font-semibold">Evidence Check: tick the evidence behind each gate</summary>
         <table className="w-full mt-2"><thead><tr><Th>Evidence</Th>{GATES.map((g) => <Th key={g}>{g}</Th>)}</tr></thead><tbody>{EVIDENCE.map((e, ei) => <tr key={e}><td className="td">{ei + 1}. {e}</td>{GATES.map((g) => <td key={g} className="td"><Toggle label={`${g} evidence ${ei + 1}`} on={!!model.assessor.evidence[g]?.[ei]} onText="YES" offText="NO" onChange={(v) => edit((d) => { const a = d.assessor.evidence[g] ?? Array(6).fill(false); a[ei] = v; d.assessor.evidence[g] = a; })} /></td>)}</tr>)}</tbody></table></details></Card>
 
-    <Card title="Risks, Assumptions, Opportunities & Actions" term="Register" right={<button className="btn-p" onClick={() => edit((d) => d.register.push({ id: `R${String(d.register.length + 1).padStart(2, '0')}`, type: 'Risk', title: '', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: '' }))}>+ Add item</button>}>
-      <div className="overflow-auto"><table className="w-full min-w-[1150px]"><thead><tr><Th>Ref</Th><Th>Type</Th><Th>Title</Th><Th>Owner</Th><Th>Time (1–5)</Th><Th>Cost (1–5)</Th><Th term="Impact Score">Score</Th><Th>Level</Th><Th>Due</Th><Th>Status</Th><Th>Flags</Th><th className="th" /></tr></thead>
+    <Card title="Cells on the Assessor" right={<span className="text-xs">Passport cells must be listed here</span>}>
+      <div className="flex flex-wrap gap-2 items-center">{model.assessor.cells.map((c) => <span key={c} className={`inline-flex items-center gap-1 bg-steel-100 border border-steel-200 rounded px-1.5 py-0.5 ${focus?.kind === 'assessor' && focus.ref === c ? 'focus-flash' : ''}`}>{c}<button aria-label={`Remove ${c} from Assessor`} className="text-bad font-bold" onClick={() => edit((d) => { d.assessor.cells = d.assessor.cells.filter((x) => x !== c); })}>×</button></span>)}
+        <Sel label="Add cell to Assessor" gap={false} blank="+ add cell to Assessor" value="" options={[...new Set(model.cellLines.map((c) => c.cell).concat(model.assets.map((a) => a.cell)))].filter((c) => c && !model.assessor.cells.includes(c))} onChange={(v) => v && edit((d) => { d.assessor.cells.push(v); })} /></div></Card>
+
+    <Card title="Risks, Assumptions, Opportunities & Actions" term="Register" right={<button className="btn-p" onClick={() => edit((d) => d.register.push({ id: `R${String(d.register.length + 1).padStart(2, '0')}`, type: 'Risk', title: '', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: '', probability: null }))}>+ Add item</button>}>
+      <div className="overflow-auto"><table className="w-full min-w-[1150px]"><thead><tr><Th>Ref</Th><Th>Type</Th><Th>Title</Th><Th>Owner</Th><Th>Cell / FPD</Th><Th>Probability (1–5)</Th><Th>Time (1–5)</Th><Th>Cost (1–5)</Th><Th term="Impact Score">Score</Th><Th>Level</Th><Th>Due</Th><Th>Status</Th><Th>Flags</Th><th className="th" /></tr></thead>
         <tbody>{model.register.map((r, i) => { const s = score(r), lv = level(s), od = isOverdue(r, asOf); return <FocusRow key={r.id + i} match={focus?.kind === 'risk' && focus.ref === r.id}>
           <td className="td">{r.id}</td>
           <td className="td w-32"><Sel label={`Type of ${r.id}`} gap={false} blank="" value={r.type} options={REG_TYPES} onChange={(v) => upd(i, (x) => { x.type = v as RegType; })} /></td>
           <td className="td w-64"><input aria-label={`Title of ${r.id}`} className={`inp ${r.title ? '' : 'inp-gap'}`} value={r.title} onChange={(e) => upd(i, (x) => { x.title = e.target.value; })} /></td>
           <td className="td w-44"><Sel label={`Owner of ${r.id}`} value={r.owner} options={model.settings.lists.Owners ?? []} onChange={(v) => upd(i, (x) => { x.owner = v; })} /></td>
+          <td className="td w-40"><input aria-label={`Cell of ${r.id}`} list="reg-cells" className={`inp ${r.link || r.type === 'Action' ? '' : 'inp-gap'}`} value={r.link} onChange={(e) => upd(i, (x) => { x.link = e.target.value; })} /></td>
+          <td className="td w-20"><NumInput label={`Probability of ${r.id}`} gap={r.type !== 'Action'} min={1} step={1} value={r.probability} onChange={(v) => upd(i, (x) => { x.probability = v; })} /></td>
           <td className="td w-20"><NumInput label={`Time impact of ${r.id}`} gap={r.type !== 'Action'} min={1} step={1} value={r.timeImpact} onChange={(v) => upd(i, (x) => { x.timeImpact = v; })} /></td>
           <td className="td w-20"><NumInput label={`Cost impact of ${r.id}`} gap={r.type !== 'Action'} min={1} step={1} value={r.costImpact} onChange={(v) => upd(i, (x) => { x.costImpact = v; })} /></td>
           <td className="td font-mono">{s ?? '–'}</td><td className="td"><span className="chip" style={{ background: LC[lv] }}>{lv}</span></td>
@@ -42,6 +48,7 @@ export function WsGovernance() {
           <td className="td w-32"><Sel label={`Status of ${r.id}`} gap={false} blank="" value={r.status} options={model.settings.lists.Statuses ?? []} onChange={(v) => upd(i, (x) => { x.status = v; })} /></td>
           <td className="td">{od && <span className="chip bg-bad" data-testid="overdue">OVERDUE</span>}</td>
           <td className="td"><button className="text-bad" aria-label={`Delete ${r.id}`} onClick={() => edit((d) => { d.register.splice(i, 1); })}>🗑</button></td></FocusRow>; })}</tbody></table></div>
+      <datalist id="reg-cells">{[...new Set(model.assets.map((a) => a.cell))].map((c) => <option key={c} value={c} />)}</datalist>
       <p className="text-xs text-steel-500 mt-1">Score = time impact × cost impact. HIGH ≥ 15, MEDIUM ≥ 8. Actions are flagged OVERDUE when past due and not closed (as of {asOf}).</p></Card>
 
     <Card title="10-Point Independent Self-Test" right={<span className={`chip ${passed === tests.length ? 'bg-good' : 'bg-bad'}`} data-testid="selftest-total">{passed} / {tests.length} PASS</span>}>

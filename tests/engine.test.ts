@@ -12,6 +12,26 @@ import { pressureList } from '../src/engine/sensitivity';
 describe('engine', () => {
   const m = demoModel();
   it('has exactly 34 data check rules', () => { expect(RULES.length).toBe(34); expect(new Set(RULES.map((r) => r.id)).size).toBe(34); });
+  it('rules match the Start-sheet list 1-for-1 (id, severity, order)', () => {
+    const sev = 'EEEEIEEEWWWWIWWWWWWEWIIWWEWWWWWWIIW'.replace(/(.{4})(.*)/, '$1$2');
+    const want = 'E E E E I E E E W W W W I W W W W W W E W I I W W E W W W W W I I W'.split(' ').map((c) => ({ E: 'ERROR', W: 'WARN', I: 'INFO' } as Record<string, string>)[c]);
+    expect(want.length).toBe(34); void sev;
+    expect(RULES.map((r) => r.severity)).toEqual(want); RULES.forEach((r, i) => expect(r.id).toBe(`DC${String(i + 1).padStart(2, '0')}`));
+  });
+  it('each rule fires on a crafted bad model', () => {
+    const b = demoModel();
+    b.cellLines.push({ ...b.cellLines[0] }); b.cellLines[1].factory = 'XX'; b.cellLines[0].version = ''; b.cellLines[2].passport = true;
+    b.assets[0].cell = 'GHOST'; b.assets[1].factory = 'DPF'; b.assets[2].shift = ''; b.assets[3].inspectionHrs = 5; b.assets[4].passportLoadHrs = null; b.assets[4].passportOee = null; b.register.forEach((x) => { if (x.type === 'Action') x.link = ''; }); b.assets[4].plannedLossPct = 0.995; b.assets[5].machines = 0;
+    b.assets[6].complexity = 'Exotic'; b.assets[7].asset = b.assets[6].asset; b.assets[6].passportLoadHrs = null; b.assets[8].loadHrs = null; b.assets[8].costUncPct = 0.1;
+    b.settings.defaultComplexity = 'Nope'; b.settings.stressTest = true; b.settings.costEntries.push({ id: 'Kx', asset: 'Ghost', cost: null, unc: 0.1, raw: 'abc' });
+    b.settings.lists.Cells.push(''); b.cellLines[0].inspectionHrs = 99999; b.cellLines[0].footprint = 100; b.fpds[0].version = '';
+    b.links.push({ id: 'Lx', parent: 'FPD-99', child: 'FPD-01', rule: 'Overlap %', param: null, transferDays: 0, adjustTakts: 0 });
+    b.register.push({ id: 'R9', type: 'Risk', title: 't', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: 'Nowhere', probability: null }, { id: 'R8', type: 'Action', title: 'a', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: '', probability: null });
+    b.scenarios.push({ id: 'Sx', name: 'Bad', factory: 'HT', cell: 'x', asset: 'y', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '', note: '', reroute: 5 }); b.assessor.cells.push('Phantom');
+    for (let i = 0; i < 35; i++) b.cellLines.push({ ...b.cellLines[2], id: `Z${i}`, cell: `Z${i}` });
+    const r = runChecks(b, '2026-01-01'); const missing = RULES.filter((x) => !r.perRule[x.id]).map((x) => x.id);
+    expect(missing).toEqual([]);
+  });
   it('demo flags gaps in all severities', () => { const r = runChecks(m, '2026-01-01'); expect(r.counts.ERROR + r.counts.WARN + r.counts.INFO).toBeGreaterThan(5); expect(r.counts.WARN).toBeGreaterThan(0); });
   it('headroom formula', () => {
     const a = m.assets[0]; const c = calcAsset(m, a, 'model');
@@ -19,7 +39,7 @@ describe('engine', () => {
   });
   it('cells GREEN/AMBER/RED bands', () => { const cs = cells(m, 'model'); expect(cs.length).toBe(3); expect(cs.map((c) => c.band)).toEqual(['AMBER', 'RED', 'GREEN']); });
   it('critical chain matches workbook narrative', () => { expect(solve(m, 0).chain).toEqual(['FPD-10', 'FPD-08', 'FPD-05', 'FPD-01']); });
-  it('detects circular loops', () => { const c = demoModel(); c.links.push({ id: 'X', parent: 'FPD-10', child: 'FPD-01', rule: 'Complete', param: null, transferDays: 0, adjustTakts: 0 }); expect(findCycles(c).length).toBeGreaterThan(0); expect(runChecks(c).perRule.DC09).toBeGreaterThan(0); expect(solve(c, 0).endDay).toBeGreaterThan(0); });
+  it('detects circular loops', () => { const c = demoModel(); c.links.push({ id: 'X', parent: 'FPD-10', child: 'FPD-01', rule: 'Complete', param: null, transferDays: 0, adjustTakts: 0 }); expect(findCycles(c).length).toBeGreaterThan(0); expect(runChecks(c).perRule.DC26).toBeGreaterThan(0); expect(solve(c, 0).endDay).toBeGreaterThan(0); });
   it('self-test passes 10/10 on demo', () => { const r = runSelfTest(m); expect(r.length).toBe(10); r.forEach((t) => expect(t.pass, `${t.id} ${t.name} ${t.detail}`).toBe(true)); });
   it('empty workbook is safe', () => { const e = emptyModel(); expect(runChecks(e).empty).toBe(true); expect(cells(e, 'model')).toEqual([]); expect(solve(e, 0).endDay).toBe(0); expect(() => runSelfTest(e)).not.toThrow(); expect(costByFactory(e).length).toBe(2); expect(compareRows(e)).toEqual([]); });
   it('partial xlsx ingestion', () => {
@@ -37,7 +57,7 @@ describe('engine', () => {
     expect(back.model.assessor.ratings['Design|7']).toBe('Not met'); expect(back.model.register.length).toBe(m.register.length);
     const filled = structuredClone(back.model); filled.assets[2].passportOee = 0.8;
     const out = exportWorkbook(filled, back.wb); const again = parseWorkbook(XLSX.read(out, { type: 'array' }), 'y').model;
-    expect(again.assets[2].passportOee).toBeCloseTo(0.8); expect(again.settings.confirmed['Planned weeks per factory']).toBe(true);
+    expect(again.assets[2].passportOee).toBeCloseTo(0.8); expect(again.cellLines.length).toBe(3); expect(again.settings.costEntries.length).toBe(1); expect(again.assessor.cells.length).toBe(2); expect(again.settings.confirmed['Planned weeks per factory']).toBe(true);
   });
   it('governance', () => { expect(gateStatus(m, 'Design').blocked).toBe(true); expect(gateStatus(m, 'Define').label).toBe('PASSED'); expect(level(15)).toBe('HIGH'); expect(level(8)).toBe('MEDIUM'); expect(level(7)).toBe('LOW'); });
   it('sensitivity, levers & monte carlo', () => {

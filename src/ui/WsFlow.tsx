@@ -19,7 +19,7 @@ export function WsFlow() {
   const ids = model.fpds.map((p) => p.id); const names = Object.fromEntries(model.fpds.map((p) => [p.id, p.name]));
   const cellNames = [...new Set(model.assets.map((a) => a.cell))];
   const nowWip = wipAt(flow, Math.min(cursor, end)).reduce((a, b) => a + b.wip, 0);
-  const addFpd = () => edit((d) => { let n = 1; while (d.fpds.some((p) => p.id === `FPD-${String(n).padStart(2, '0')}`)) n++; if (n <= 20) d.fpds.push({ id: `FPD-${String(n).padStart(2, '0')}`, name: '', cell: '', hours: null, volume: null, whd: null }); });
+  const addFpd = () => edit((d) => { let n = 1; while (d.fpds.some((p) => p.id === `FPD-${String(n).padStart(2, '0')}`)) n++; if (n <= 20) d.fpds.push({ id: `FPD-${String(n).padStart(2, '0')}`, name: '', cell: '', hours: null, volume: null, whd: null, version: '', date: '' }); });
   const ax = axisUnit(end);
   if (!model.fpds.length) return <Empty><p>No FPDs yet.</p><button className="btn-p mt-2" onClick={addFpd}>+ Add FPD-01</button></Empty>;
   return <div className="grid gap-4">
@@ -31,7 +31,7 @@ export function WsFlow() {
       </div></Card>
 
     <Card title="FPD table" term="FPD" right={<button className="btn" onClick={addFpd} disabled={model.fpds.length >= 20}>+ Add FPD</button>}>
-      <div className="overflow-auto"><table className="w-full min-w-[1100px]"><thead><tr><Th>FPD</Th><Th>Name</Th><Th>Cell</Th><Th>Hours</Th><Th>Volume</Th><Th>Working h/day</Th><Th term="Process Lead Time">Lead time (d/unit)</Th>
+      <div className="overflow-auto"><table className="w-full min-w-[1100px]"><thead><tr><Th>FPD</Th><Th>Name</Th><Th>Cell</Th><Th>Hours</Th><Th>Volume</Th><Th>Working h/day</Th><Th>Version</Th><Th>Date</Th><Th term="Process Lead Time">Lead time (d/unit)</Th>
         {Object.keys(UPLIFTS).map((k) => <Th key={k} term="Uplift Case">{k}</Th>)}<Th>Duration (d)</Th><Th term="Little's Law">WIP</Th><th className="th" /></tr></thead>
         <tbody>{model.fpds.map((p, i) => { const c = fpdCalc(model, p, up); const s = flow.sched[p.id]; return <FocusRow key={p.id} match={focus?.kind === 'fpd' && focus.ref === p.id}>
           <td className="td font-semibold">{p.id}</td>
@@ -40,6 +40,8 @@ export function WsFlow() {
           <td className="td w-24"><NumInput label={`Hours of ${p.id}`} value={p.hours} onChange={(v) => edit((d) => { d.fpds[i].hours = v; })} /></td>
           <td className="td w-24"><NumInput label={`Volume of ${p.id}`} value={p.volume} onChange={(v) => edit((d) => { d.fpds[i].volume = v; })} /></td>
           <td className="td w-24"><NumInput label={`Working hours per day of ${p.id}`} gap={model.settings.defaultWhd === null} value={p.whd} onChange={(v) => edit((d) => { d.fpds[i].whd = v; })} /></td>
+          <td className="td w-20"><input aria-label={`Version of ${p.id}`} className={`inp ${p.version ? '' : 'inp-gap'}`} value={p.version} onChange={(e) => edit((d) => { d.fpds[i].version = e.target.value; })} /></td>
+          <td className="td w-36"><input aria-label={`Date of ${p.id}`} type="date" className={`inp ${p.date ? '' : 'inp-gap'}`} value={p.date} onChange={(e) => edit((d) => { d.fpds[i].date = e.target.value; })} /></td>
           <td className="td font-mono">{c.ok ? n1(c.ltUnit, 2) : '–'}</td>
           {Object.values(UPLIFTS).map((u, k) => { const cc = fpdCalc(model, p, u); return <td key={k} className="td font-mono text-steel-700">{cc.ok ? n1(cc.ltUnit, 2) : '–'}</td>; })}
           <td className="td font-mono">{c.ok ? n1(c.duration, 0) : '–'}{s && c.ok ? <span className="text-steel-500 text-[11px]"> (d{n1(s.start, 0)}–{n1(s.end, 0)})</span> : null}</td><td className="td font-mono">{c.ok ? n1(c.wip, 2) : '–'}</td>
@@ -57,7 +59,7 @@ export function WsFlow() {
           <td className="td w-24"><NumInput gap={false} label="Adjust in takts" value={l.adjustTakts} onChange={(v) => edit((d) => { d.links[i].adjustTakts = v ?? 0; })} /></td>
           <td className="td text-xs">{flow.sched[l.child]?.driver === l.parent ? <b className="text-bad">drives start</b> : ''}</td>
           <td className="td"><button className="text-bad" aria-label="Delete link" onClick={() => edit((d) => { d.links.splice(i, 1); })}>🗑</button></td></FocusRow>)}</tbody></table>
-      {checks.perRule.DC09 > 0 && <p className="text-bad mt-2 font-semibold">Circular loop detected: the loop links are ignored by the solver until you remove one.</p>}</Card>
+      {checks.perRule.DC26 > 0 && <p className="text-bad mt-2 font-semibold">Circular loop detected: the loop links are ignored by the solver until you remove one.</p>}</Card>
 
     <Card title="Gantt + Stacked WIP" right={<><button className="btn" onClick={() => setPlay(!play)} aria-pressed={play}>{play ? '⏸ Pause' : '▶ Play'}</button><button className="btn" onClick={() => { setCursor(0); setPlay(false); }}>Reset</button></>}>
       <GanttWip flow={flow} cursor={Math.min(cursor, end)} onCursor={setCursor} names={names} />
