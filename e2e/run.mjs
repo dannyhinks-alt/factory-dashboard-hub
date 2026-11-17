@@ -24,7 +24,7 @@ async function fresh(ctxOpts = {}) {
 const gapCount = async (page) => Number((await page.locator('[data-testid=gap-panel] span.text-steel-500', { hasText: 'flag(s)' }).innerText()).match(/(\d+) flag/)[1]);
 
 
-console.log('0. Blank start, session cache, Clear All Data, atomic wipe on import');
+console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe on import');
 {
   const { ctx, page, errors } = await fresh();
   await page.addInitScript(() => { window.__saves = []; window.showSaveFilePicker = async () => ({ name: 'x.json', createWritable: async () => ({ write: async (t) => window.__saves.push(t), close: async () => {} }) }); });
@@ -39,7 +39,7 @@ console.log('0. Blank start, session cache, Clear All Data, atomic wipe on impor
   await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'empty workbook has 0 FPDs');
   await page.getByTestId('ws-4').click(); ok((await page.getByTestId('active-cell-badge').innerText()).includes('All cells'), 'empty workbook has no assessed cells');
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
-  ok(await page.getByTestId('dropzone').isVisible(), 'Clear All Data returns to blank start');
+  ok(await page.getByTestId('dropzone').isVisible(), 'Clear / Blank Workspace returns to blank start');
   await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
   ok(await page.getByTestId('gap-panel').isVisible(), 'demo loads only on explicit click');
   await page.reload();
@@ -293,6 +293,29 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
   await page.getByTestId('log-Set A').click();
   ok((await page.getByLabel('Scenario name').count()) > before, 'Log to Scenario Table adds scenario lines');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await ctx.close();
+}
+
+console.log('8. Legacy / corrupted cached sessions never crash the app');
+for (const [name, cached, expect_] of [
+  ['old save missing keys', JSON.stringify({ model: { assets: [{ id: 'A1', factory: 'DPF', cell: 'C1', asset: 'Mill', shift: '2 Shifts', machines: 2, oee: 0.7, loadHrs: 900 }], settings: { plannedWeeks: {} } } }), 'app'],
+  ['garbage text', '{{{ not json', 'blank'], ['wrong shape', JSON.stringify({ model: { assets: 7 } }), 'blank'], ['empty object', '{}', 'blank'],
+]) {
+  const { ctx, page, errors } = await fresh();
+  await page.evaluate((v) => localStorage.setItem('factory-hub.session.v1', v), cached); await page.reload();
+  await page.waitForTimeout(300);
+  const app = await page.getByTestId('gap-panel').count() > 0, blank = await page.getByTestId('dropzone').count() > 0;
+  ok(expect_ === 'app' ? app : blank, `${name}: ${expect_ === 'app' ? 'loads as a normal workspace' : 'falls back to the blank start screen'}`);
+  if (app) { for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click(); ok(true, `${name}: all 4 workspaces render`); }
+  ok(errors.length === 0 && (await page.locator('#boot-error').count()) === 0, `${name}: zero console errors` + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await ctx.close();
+}
+{
+  const { ctx, page, errors } = await fresh();
+  await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
+  ok(await page.getByTestId('empty-onboarding').isVisible(), 'blank workspace shows an onboarding prompt');
+  for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click();
+  ok(errors.length === 0, 'blank workspace: all 4 workspaces render with zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }
 await browser.close();

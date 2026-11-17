@@ -41,7 +41,7 @@ describe('engine', () => {
   it('critical chain matches workbook narrative', () => { expect(solve(m, 0).chain).toEqual(['FPD-10', 'FPD-08', 'FPD-05', 'FPD-01']); });
   it('detects circular loops', () => { const c = demoModel(); c.links.push({ id: 'X', parent: 'FPD-10', child: 'FPD-01', rule: 'Complete', param: null, transferDays: 0, adjustTakts: 0 }); expect(findCycles(c).length).toBeGreaterThan(0); expect(runChecks(c).perRule.DC26).toBeGreaterThan(0); expect(solve(c, 0).endDay).toBeGreaterThan(0); });
   it('self-test passes 10/10 on demo', () => { const r = runSelfTest(m); expect(r.length).toBe(10); r.forEach((t) => expect(t.pass, `${t.id} ${t.name} ${t.detail}`).toBe(true)); });
-  it('empty workbook is safe', () => { const e = emptyModel(); expect(runChecks(e).empty).toBe(true); expect(cells(e, 'model')).toEqual([]); expect(solve(e, 0).endDay).toBe(0); expect(() => runSelfTest(e)).not.toThrow(); expect(costByFactory(e).length).toBe(2); expect(compareRows(e)).toEqual([]); });
+  it('empty workbook is safe', () => { const e = emptyModel(); expect(runChecks(e).empty).toBe(true); expect(cells(e, 'model')).toEqual([]); expect(solve(e, 0).endDay).toBe(0); expect(() => runSelfTest(e)).not.toThrow(); expect(costByFactory(e).length).toBe(0); expect(compareRows(e)).toEqual([]); });
   it('partial xlsx ingestion', () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x'], [], ['Factory', 'Cell', 'Asset', 'OEE %', 'Annual Load (h)'], ['HT', 'C1', 'Oven', 'TBC', ''], ['HT', 'C1', 'Oven2', '85%', 1000]]), 'Data');

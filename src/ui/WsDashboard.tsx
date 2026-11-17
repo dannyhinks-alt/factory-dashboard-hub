@@ -23,7 +23,7 @@ export function WsDashboard() {
   const utilRows = scoped.map((c) => c.bottleneck).filter(Boolean).map((b) => ({ label: b!.asset.asset, values: [b!.effUtil], lim: b!.limit }));
   const actions = nextActions(model, checks.issues, filters);
   const take = executiveTakeaway(model, filters, checks.counts.ERROR);
-  if (!model.assets.length && !model.cellLines.length) return <Empty>No assets yet. Add them in “Data &amp; Gap Filler” or open a workbook.</Empty>;
+  if (!model.assets.length && !model.cellLines.length) return <Empty><p className="font-semibold text-slate-700 mb-1" data-testid="empty-onboarding">This workspace is blank.</p><p>Start by opening your <b>.xlsx</b> workbook (top bar), or go to <b>2. Data &amp; Gap Filler</b> and add a cell line and its assets. Every chart and table fills in as soon as there is data.</p></Empty>;
   const accent = status.verdict === 'GOOD' ? 'accent-good' : status.verdict === 'WATCH' ? 'accent-watch' : 'accent-bad';
 
   return <div className="grid gap-4">

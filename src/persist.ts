@@ -1,3 +1,4 @@
+import { normaliseModel } from './engine/normalise';
 import type { Model } from './engine/types';
 
 // Minimal File System Access API typings (not in lib.dom for all TS versions)
@@ -7,9 +8,9 @@ type PickerWindow = Window & { showSaveFilePicker?: (o: unknown) => Promise<FsHa
 export const fsSupported = () => typeof window !== 'undefined' && typeof (window as PickerWindow).showSaveFilePicker === 'function';
 export const serialise = (m: Model) => JSON.stringify({ app: 'factory-dashboard-flow-hub', version: 1, savedAt: new Date().toISOString(), model: m }, null, 1);
 export function deserialise(text: string): Model {
-  const j = JSON.parse(text); const m = (j.model ?? j) as Model;
-  if (!m || !Array.isArray(m.assets) || !m.settings) throw new Error('Not a Factory Dashboard & Flow Hub save file.');
-  return m;
+  const j = JSON.parse(text); const m = j?.model ?? j;
+  if (!m || typeof m !== 'object' || (!Array.isArray(m.assets) && !m.settings)) throw new Error('Not a Factory Dashboard & Flow Hub save file.');
+  return normaliseModel(m); // older or partial saves are rebuilt onto the current shape
 }
 export async function pickSaveFile(suggested: string): Promise<FsHandle> {
   return (window as PickerWindow).showSaveFilePicker!({ suggestedName: suggested, types: [{ description: 'Hub auto-save (.json)', accept: { 'application/json': ['.json'] } }] });

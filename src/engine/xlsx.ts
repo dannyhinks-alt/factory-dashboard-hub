@@ -76,14 +76,13 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
   m.settings.costEntries = table(rowsOf(wb, 'Settings'), { asset: ['costasset'], cost: ['costentry'], unc: ['costentryuncertainty'] }, ['asset', 'cost']).map((r, i) => ({ id: `K${i + 1}`, asset: str(r.asset), cost: toNum(r.cost), unc: frac(r.unc), raw: str(r.cost) }));
   if (!sawLimits) m.settings.limits = { ...DEFAULT_LIMITS };
   if (!sawShift) m.settings.shiftHours = { ...DEFAULT_SHIFT_HOURS };
-  if (Object.keys(m.settings.plannedWeeks).length === 0) m.settings.plannedWeeks = { HT: null, DPF: null };
   PLACEHOLDERS.forEach((p) => { if (m.settings.confirmed[p] === undefined) m.settings.confirmed[p] = false; });
   if (Object.keys(lists).length) m.settings.lists = { ...m.settings.lists, ...lists };
   // ---- Data
   let id = 0;
   const dsr = parseDataSheet(rowsOf(wb, 'Data'));
   m.assets = dsr.assets; m.cellLines = dsr.cellLines;
-  m.assets.forEach((a) => { if (a.factory && m.settings.plannedWeeks[a.factory] === undefined) m.settings.plannedWeeks[a.factory] = null; });
+  [...m.assets, ...m.cellLines].forEach((a) => { if (a.factory && m.settings.plannedWeeks[a.factory] === undefined) m.settings.plannedWeeks[a.factory] = null; });
   // ---- FPD
   const skipped = new Set<string>(); // unpopulated template rows on the FPD tab
   m.fpds = table(rowsOf(wb, 'FPD'), { id: ['fpd', 'fpdid', 'fpdno'], name: ['name', 'description', 'fpdname'], cell: ['cell', 'cells', 'route'], hours: ['hours', 'totalhours'], volume: ['volume', 'units'], whd: ['workinghoursperday', 'workinghday', 'whd'], ver: ['version'], date: ['date'] }, ['id', 'hours'])

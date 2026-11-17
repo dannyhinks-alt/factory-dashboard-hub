@@ -30,7 +30,7 @@ const WS = ['Overall Status', 'Data & Gap Filler', 'Product Flow (FPD)', 'Gates,
 const SEV_COL: Record<Severity, string> = { ERROR: '#c0392b', WARN: '#c98a00', INFO: '#0b5cab' };
 const SESSION_KEY = 'factory-hub.session.v1';
 const DEFAULT_FILTERS: ScopeFilters = { factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' };
-const readSession = (): Model | null => { try { const t = localStorage.getItem(SESSION_KEY); return t ? deserialise(t) : null; } catch { return null; } };
+const readSession = (): Model | null => { try { const t = localStorage.getItem(SESSION_KEY); return t ? deserialise(t) : null; } catch { try { localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked */ } return null; } }; // an unreadable cache is dropped, never fatal
 const writeSession = (m: Model | null) => { try { if (m) localStorage.setItem(SESSION_KEY, serialise(m)); else localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked or full: session simply is not cached */ } };
 type Save = { kind: 'none' | 'saving' | 'saved' | 'error'; at?: string; msg?: string };
 
@@ -73,7 +73,7 @@ export function App() {
     setModel(structuredClone(m)); setNotes(warn); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1); setGapOpen(true); writeSession(m);
   }, []);
   const clearAll = () => {
-    if (!window.confirm('Clear ALL data? This wipes the loaded workbook, the saved session in this browser and any unsaved edits, and returns to a blank start. It cannot be undone.')) return;
+    if (!window.confirm('Clear / blank the workspace? This wipes the loaded workbook, the saved session in this browser and any unsaved edits, and returns to a blank start. It cannot be undone.')) return;
     writeSession(null); wbRef.current = null; setHandle(null); setSave({ kind: 'none' }); setF(DEFAULT_FILTERS); setSevFilter('ALL'); setRuleFilter('');
     setModel(null); setSummary(null); setNotes([]); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1);
   };
@@ -137,7 +137,7 @@ export function App() {
           <button className="btn" onClick={exportX}>Export .xlsx</button>
           <button className="btn" onClick={exportD}>Export .docx</button>
           <button className="btn" onClick={() => window.print()}>Print summary</button>
-          <button className="px-3 py-1.5 rounded border border-red-300 bg-red-700 text-white font-semibold hover:bg-red-800 text-[13px]" data-testid="clear-all" onClick={clearAll}>Clear All Data</button>
+          <button className="px-3 py-1.5 rounded border border-red-300 bg-red-700 text-white font-semibold hover:bg-red-800 text-[13px]" data-testid="clear-all" onClick={clearAll}>Clear / Blank Workspace</button>
         </>}
       </header>
       {model && <div className="px-4 pb-2 flex flex-wrap items-center gap-3 text-white" data-testid="command-bar">
