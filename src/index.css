@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { @apply bg-steel-50 text-ink font-sans text-[13px]; }
+@layer components {
+  .card { @apply bg-white border border-steel-200 rounded shadow-sm; }
+  .card-h { @apply px-3 py-2 border-b border-steel-200 font-semibold text-steel-700 flex items-center gap-2 bg-steel-100 rounded-t; }
+  .btn { @apply px-3 py-1.5 rounded border border-steel-300 bg-white hover:bg-steel-100 text-ink text-[13px] disabled:opacity-40; }
+  .btn-p { @apply px-3 py-1.5 rounded bg-accent text-white hover:bg-blue-800 text-[13px] font-medium disabled:opacity-40; }
+  .inp { @apply border border-steel-300 rounded px-1.5 py-1 bg-white text-[13px] w-full min-w-0 focus:outline-none focus:ring-2 focus:ring-accent; }
+  .inp-gap { @apply bg-amber-50 border-amber-400; }
+  .th { @apply text-left font-semibold text-steel-700 px-2 py-1.5 border-b border-steel-300 bg-steel-100 whitespace-nowrap sticky top-0; }
+  .td { @apply px-2 py-1 border-b border-steel-100 align-middle; }
+  .chip { @apply inline-block px-2 py-0.5 rounded text-[11px] font-bold text-white; }
+}
+.focus-flash { animation: flash 2.2s ease-out; }
+@keyframes flash { 0%, 60% { background: #fde68a; box-shadow: 0 0 0 2px #f59e0b; } 100% { background: transparent; box-shadow: none; } }
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .card { break-inside: avoid; box-shadow: none; }
+}
