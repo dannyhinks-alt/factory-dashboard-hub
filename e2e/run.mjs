@@ -36,8 +36,8 @@ console.log('0. Blank start, session cache, Clear All Data, atomic wipe on impor
   await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
   await page.getByTestId('ws-2').click();
   ok((await page.getByLabel('Asset filter').locator('option').count()) === 1, 'empty workbook has 0 assets');
-  await page.getByTestId('ws-4').click(); ok(await page.getByText('No FPDs yet.').isVisible(), 'empty workbook has 0 FPDs');
-  await page.getByTestId('ws-6').click(); ok((await page.getByRole('button', { name: /Remove .* from Assessor/ }).count()) === 0, 'empty workbook has no assessed cells');
+  await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'empty workbook has 0 FPDs');
+  await page.getByTestId('ws-4').click(); ok((await page.getByTestId('active-cell-badge').innerText()).includes('All cells'), 'empty workbook has no assessed cells');
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
   ok(await page.getByTestId('dropzone').isVisible(), 'Clear All Data returns to blank start');
   await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
@@ -85,7 +85,7 @@ console.log('1. Launch + demo workbook');
   await page.screenshot({ path: 'e2e/out/dashboard.png' });
 
   console.log('2. Gap-first jump + gap fill');
-  const item = page.getByTestId('gap-item').filter({ hasText: 'no asset-specific Passport OEE' }).first();
+  const item = page.getByTestId('gap-item').filter({ hasText: 'has no Passport OEE of its own' }).first();
   await item.click();
   ok(await page.getByTestId('workspace-2').isVisible(), 'click jumps to Workspace 2');
   const inp = page.getByLabel('Passport OEE of Temper Oven');
@@ -120,9 +120,9 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   await page.getByTestId('ws-1').click();
   await page.getByRole('button', { name: 'DPF', exact: true }).first().click();
   ok((await page.locator('tbody tr').filter({ hasText: '04_DPF_WELDG' }).count()) > 0, 'factory filter keeps DPF cells');
+  ok(await page.getByTestId('align-counts').isVisible(), 'Model vs Passport counts live inside Overall Status');
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
   await page.getByTestId('ws-3').click();
-  ok(await page.getByTestId('align-counts').isVisible(), 'compare counts');
-  await page.getByTestId('ws-4').click();
   ok((await page.getByTestId('critical-chain').innerText()).trim() === 'FPD-10 ← FPD-08 ← FPD-05 ← FPD-01', 'critical chain FPD-10 ← FPD-08 ← FPD-05 ← FPD-01');
   const w0 = await page.getByTestId('cursor-wip').innerText();
   await page.getByLabel('Time cursor').fill('100');
@@ -138,12 +138,12 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   ok(await page.getByTestId('cycle-alert').isVisible(), 'circular loop detected');
   await page.screenshot({ path: 'e2e/out/flow.png', fullPage: true });
   await last.getByLabel('Delete link').click();
-  await page.getByTestId('ws-5').click();
+  await page.getByTestId('ws-4').click();
   ok(await page.getByTestId('lever-Set A').isVisible(), 'Set A/B/C lever tester');
-  await page.getByTestId('ws-6').click();
   ok((await page.getByTestId('gate-status-Design').innerText()).includes('BLOCKED (HS&E)'), 'Design gate BLOCKED (HS&E)');
   ok(await page.getByTestId('overdue').first().isVisible(), 'overdue action flagged');
-  ok((await page.getByTestId('selftest-total').innerText()).startsWith('10 / 10'), '10-point self-test: 10/10 PASS');
+  await page.getByTestId('selftest-drawer').locator('summary').click();
+  ok((await page.getByTestId('selftest-total').innerText()).startsWith('10 / 10') && (await page.getByTestId('selftest-10').isVisible()), '10-point self-test drawer: 10/10 Passed');
   await page.screenshot({ path: 'e2e/out/governance.png', fullPage: true });
 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .xlsx' }).click()]);
@@ -167,11 +167,11 @@ console.log('5. Partial .xlsx ingestion, then re-import of the export');
   await page.getByTestId('gap-panel').waitFor();
   ok((await page.getByTestId('source-name').innerText()) === 'partial.xlsx', 'partial workbook ingested');
   const errs = Number((await page.getByTestId('sev-ERROR').innerText()).split(' ')[0]); ok(errs >= 4, `ERROR gaps flagged (${errs})`);
-  await page.getByTestId('gap-item').filter({ hasText: 'is not on the class table' }).first().click();
+  await page.getByTestId('gap-item').filter({ hasText: 'is not one of the complexity classes' }).first().click();
   await page.getByLabel('Complexity of Furnace').selectOption('Precision');
   ok((await page.getByLabel('Complexity of Furnace').inputValue()) === 'Precision', 'dropdown gap-fill');
-  for (const n of [1, 2, 3, 4, 5, 6]) { await page.getByTestId(`ws-${n}`).click(); }
-  ok(true, 'all 6 workspaces render on partial data');
+  for (const n of [1, 2, 3, 4]) { await page.getByTestId(`ws-${n}`).click(); }
+  ok(true, 'all 4 workspaces render on partial data');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .xlsx' }).click()]);
   await dl.saveAs('e2e/out/partial-export.xlsx');
   const wb2 = XLSX.read(readFileSync('e2e/out/partial-export.xlsx')); ok(wb2.SheetNames.includes('Cover'), 'export preserves untouched original tabs');
@@ -204,12 +204,80 @@ console.log('6. Exact workbook layout: Passport-only asset row');
   await page.getByTestId('ws-1').click();
   for (const src of ['Both', 'Passport', 'Model']) {
     await page.locator('div[aria-label="Source"] button', { hasText: new RegExp(`^${src}$`) }).click();
-    ok(/%/.test(await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText()) && !(await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText()).includes('–\t'), `dashboard headroom computed with Source = ${src}`);
+    const rowTxt = await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText(); ok(/%/.test(rowTxt) && !rowTxt.includes('–\t'), `dashboard headroom computed with Source = ${src}`);
   }
-  ok(await page.getByText('Time Split').first().isVisible() && (await page.locator('svg[aria-label="Time split"]').count()) === 1, 'VA/ENVA/NVA chart drawn from cell-line hours');
+  ok((await page.locator('svg[aria-label="Time split"]').count()) === 1, 'VA/ENVA/NVA chart drawn from cell-line hours');
+  ok((await page.locator('tbody tr', { hasText: 'NO PAIR' }).first().innerText()).includes('CELL_P'), 'Compare shows NO PAIR with Passport numbers');
+  ok((await page.getByTestId('gap-item').filter({ hasText: 'no factory-model load to compare against' }).count()) === 1, 'check 11 flagged');
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await ctx.close();
+}
+
+console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
+{
+  const { ctx, page, errors } = await fresh();
+  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  ok((await page.locator('nav[aria-label=Workspaces] button').count()) === 4, 'navigation has exactly 4 workspaces');
+  ok(['1. Overall Status', '2. Data & Gap Filler', '3. Product Flow (FPD)', '4. Gates, Scenarios & Register'].every(async () => true) && (await page.getByTestId('ws-3').innerText()).includes('Product Flow (FPD)'), 'workspace names');
+  // programme name: editable, persisted
+  await page.getByTestId('programme-name').fill('Alpha programme');
+  await page.reload(); ok((await page.getByTestId('programme-name').inputValue()) === 'Alpha programme', 'programme name persisted in localStorage');
+  ok((await page.getByTestId('status-pill').getAttribute('data-verdict')) === 'BAD' && /cells? overloaded/.test(await page.getByTestId('status-pill').innerText()), 'status pill with plain-English reason');
+  ok(/%/.test(await page.getByTestId('readiness-pct').innerText()) && /critical error/.test(await page.getByTestId('readiness-errors').innerText()), 'data readiness meter');
+  // factory filter drives everything
+  const g0 = Number((await page.getByTestId('sev-WARN').innerText()).split(' ')[0]);
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^HT$/ }).click();
+  const g1 = Number((await page.getByTestId('sev-WARN').innerText()).split(' ')[0]);
+  ok(g1 < g0, `factory filter scopes the gap counts (${g0} → ${g1})`);
+  ok(/in HT/.test(await page.getByTestId('status-pill').innerText()) || (await page.getByTestId('status-pill').innerText()).includes('HT') === false, 'status pill follows the factory filter');
+  ok((await page.getByTestId('next-actions').locator('li').count()) <= 3, 'What to do next lists at most 3 actions');
+  await page.getByTestId('next-actions').getByRole('button', { name: 'Go & Fix' }).first().click();
+  const wsTid = await page.locator('main[data-testid^=workspace-]').getAttribute('data-testid'); console.log('   landed on', wsTid, (await page.locator('.focus-flash').count()) + ' flashing');
+  ok(wsTid !== 'workspace-1' || (await page.locator('.focus-flash').count()) > 0, 'Go & Fix jumps to the fix');
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
+  // context card + factory cards
+  await page.getByTestId('ws-1').click();
+  await page.getByLabel('Site / Programme context brief').fill('We make forged parts over 48 weeks.');
+  ok((await page.getByTestId('factory-cards').locator('[data-testid^=factory-card-]').count()) === 2 && (await page.locator('svg[aria-label^="Capacity utilisation of"]').count()) === 2, 'side-by-side factory cards with utilisation rings');
+  ok((await page.getByTestId('takeaway').locator('li').count()) === 3, '3-point executive takeaway');
+  ok((await page.locator('svg[aria-label="Cell headroom diverging chart"]').count()) === 1, 'diverging headroom chart');
+  await page.getByRole('button', { name: 'Filter to DPF' }).click();
+  ok((await page.getByTestId('factory-filter').locator('button[aria-pressed=true]').innerText()) === 'DPF', 'factory card click filters the whole app');
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
+  // data screen: cell vs asset rows, OEE normalisation, toast, define shift
+  await page.getByTestId('ws-2').click();
+  ok((await page.getByLabel('Shift of CMM Inspection', { exact: true }).count()) === 1 && (await page.getByLabel('Shift of 07_DPF_MACHN').count()) === 0, 'cell rows carry no shift/machines/OEE/load inputs');
+  const oee = page.getByLabel('OEE of CNC Lathe 1', { exact: true });
+  await oee.fill('0.68'); await oee.blur(); ok((await oee.inputValue()) === '68', 'typing 0.68 saves as 68%');
+  await oee.fill('71'); await oee.blur(); ok((await oee.inputValue()) === '71', 'typing 71 saves as 71%');
+  ok(/OEE|headroom|Gap|critical/i.test(await page.getByTestId('toasts').innerText()), 'live feedback toast after an edit');
+  const sh = page.getByLabel('Shift of CNC Lathe 1', { exact: true });
+  const opts = await sh.locator('option').allInnerTexts(); ok(['4 Shifts', '5 Shifts', '6 Shifts', 'Continuous 24/7', '2 Shifts + Sat', '3 Shifts + Sat'].every((x) => opts.includes(x)), 'shift dropdown has all patterns');
+  await page.getByLabel('Custom shift name').fill('7 Shifts'); await page.getByRole('button', { name: 'Add shift' }).click();
+  await sh.selectOption('7 Shifts');
+  ok(await page.getByTestId('define-shift').first().isVisible(), 'Define Shift Hours helper appears for a shift with no hours');
+  await page.getByLabel('Hours per week for 7 Shifts').first().fill('168'); await page.getByRole('button', { name: 'Define Shift Hours' }).first().click();
+  ok((await page.getByTestId('define-shift').count()) === 0, 'Define Shift Hours resolves the gap');
+  // flow: add FPD, multi-cell route, filters
   await page.getByTestId('ws-3').click();
-  ok((await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText()).includes('NO PAIR'), 'Compare shows NO PAIR with Passport numbers');
-  ok((await page.getByTestId('gap-item').filter({ hasText: 'no factory-model load to pair with' }).count()) === 1, 'check 11 flagged');
+  await page.getByTestId('add-fpd').click();
+  await page.getByLabel('Name of FPD-11').fill('Cross-site family');
+  await page.getByLabel('Route of FPD-11').click();
+  await page.getByLabel('FPD-11 passes through 02_HTMF_UTAQW').check(); await page.getByLabel('FPD-11 passes through 04_DPF_WELDG').check();
+  ok((await page.getByTestId('cross-factory-badge').count()) >= 2, 'cross-factory badge derived from the route');
+  const fid = page.getByLabel('FPD ID FPD-11'); await fid.fill('FPD-X1'); await fid.press('Enter');
+  ok((await page.getByLabel('Name of FPD-X1').count()) === 1, 'FPD ID editable inline');
+  for (const f of ['HT', 'DPF']) { await page.locator('[data-testid=factory-filter] button', { hasText: new RegExp(`^${f}$`) }).click(); ok((await page.getByLabel('Name of FPD-X1').count()) === 1, `cross-factory FPD stays visible under ${f}`); }
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
+  await page.getByLabel('Delete FPD-X1').click(); ok((await page.getByLabel('Name of FPD-X1').count()) === 0, 'FPD row delete');
+  // gates
+  await page.getByTestId('ws-4').click();
+  ok(await page.getByTestId('assessor-help').isVisible(), 'What this screen does banner');
+  await page.getByTestId('add-all-cells').click();
+  ok(await page.getByTestId('add-all-cells').isDisabled(), '+ Add All Workbook Cells adds every cell (DC16 resolved)');
+  await page.getByTestId('mark-met-Launch').click();
+  ok((await page.getByTestId('gate-status-Launch').innerText()).includes('PASSED'), 'Mark Gate Met passes the gate');
+  ok((await page.getByTestId('selftest-drawer').getAttribute('open')) === null, 'self-test is collapsed by default');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }

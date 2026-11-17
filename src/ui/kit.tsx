@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useApp } from '../store';
+import { normalisePct } from '../engine/calc';
 import type { Band } from '../engine/calc';
 
 export function Info({ term, text }: { term?: string; text?: string }) {
@@ -33,7 +34,8 @@ export function NumInput({ value, onChange, pct = false, step, min, label, gap =
   const last = useRef(value);
   useEffect(() => { if (last.current !== value) { setT(show(value)); last.current = value; } }, [value]); // eslint-disable-line
   return <input aria-label={label} type="number" step={step ?? (pct ? 1 : 'any')} min={min} className={`inp ${gap && value === null ? 'inp-gap' : ''} ${w ?? ''}`} value={t} placeholder="gap"
-    onChange={(e) => { setT(e.target.value); const n = e.target.value.trim() === '' ? null : Number(e.target.value); const v = n === null || !Number.isFinite(n) ? null : pct ? n / 100 : n; last.current = v; onChange(v); }} />;
+    onBlur={() => setT(show(value))}
+    onChange={(e) => { setT(e.target.value); const n = e.target.value.trim() === '' ? null : Number(e.target.value); const v = n === null || !Number.isFinite(n) ? null : pct ? normalisePct(n) : n; last.current = v; onChange(v); }} />;
 }
 
 export function Sel({ value, options, onChange, label, gap = true, blank = '— select —' }: { value: string; options: readonly string[]; onChange: (v: string) => void; label: string; gap?: boolean; blank?: string }) {

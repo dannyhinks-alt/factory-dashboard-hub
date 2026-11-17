@@ -14,7 +14,7 @@ const H = (t: string) => new Paragraph({ text: t, heading: HeadingLevel.HEADING_
 export async function buildDocx(m: Model, f: ScopeFilters, checks: CheckResult): Promise<Blob> {
   const cs = cells(m, 'model'); const verdict = verdictOf(cs, checks.counts.ERROR); const flow = solve(m, UPLIFTS[f.uplift] ?? 0);
   const doc = new Document({ sections: [{ children: [
-    new Paragraph({ text: 'Factory Dashboard & Flow Hub: Summary', heading: HeadingLevel.TITLE }),
+    new Paragraph({ text: `Factory Dashboard & Flow Hub: ${m.programmeName || 'Summary'}`, heading: HeadingLevel.TITLE }),
     new Paragraph({ children: [new TextRun({ text: `Source: ${m.sourceName}. Verdict: ${verdict}.`, bold: true })], alignment: AlignmentType.LEFT }),
     H('The story in five lines'), ...fiveLines(m, f, checks.counts.ERROR).map((l, i) => new Paragraph({ text: `${i + 1}. ${l}` })),
     H('Cell headroom board'), tbl(['Factory', 'Cell', 'Headroom', 'Band', 'Bottleneck'], cs.map((c) => [c.factory, c.cell, pct(c.headroom), c.band, c.bottleneck?.asset.asset ?? '–'])),

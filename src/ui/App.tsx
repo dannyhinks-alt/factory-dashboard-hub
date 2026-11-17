@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as XLSX from 'xlsx';
 import { DICTIONARY } from '../engine/constants';
 import { RULES, runChecks } from '../engine/checks';
+import { factoriesOf, cells as calcCells } from '../engine/calc';
+import { readiness, scopeChecks, statusReason } from '../engine/overview';
+import { verdictOf } from '../engine/story';
+import { impactMessage } from '../engine/toast';
 import { demoModel, emptyModel } from '../engine/demo';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
@@ -13,16 +17,16 @@ import { AppCtx } from '../store';
 import { buildDocx } from '../docxExport';
 import { deserialise, download, fsSupported, pickSaveFile, serialise, writeHandle } from '../persist';
 import type { FsHandle } from '../persist';
-import { Info } from './kit';
+import { Info, Seg } from './kit';
 import { WsDashboard } from './WsDashboard';
 import { WsData } from './WsData';
-import { WsCompare } from './WsCompare';
 import { WsFlow } from './WsFlow';
 import { WsSensitivity } from './WsSensitivity';
-import { WsGovernance } from './WsGovernance';
+import { SelfTestDrawer, WsGovernance } from './WsGovernance';
+import { WsCompare } from './WsCompare';
 import { PrintSummary } from './PrintSummary';
 
-const WS = ['Executive Dashboard', 'Factory Data & Settings', 'Model vs Passport', 'Flow View', 'Sensitivity & Levers', 'Gates, Register & Self-Test'];
+const WS = ['Overall Status', 'Data & Gap Filler', 'Product Flow (FPD)', 'Gates, Scenarios & Register'];
 const SEV_COL: Record<Severity, string> = { ERROR: '#c0392b', WARN: '#c98a00', INFO: '#0b5cab' };
 const SESSION_KEY = 'factory-hub.session.v1';
 const DEFAULT_FILTERS: ScopeFilters = { factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' };
@@ -51,7 +55,15 @@ export function App() {
   const jsonRef = useRef<HTMLInputElement>(null);
   const asOf = useMemo(() => todayIso(), []);
 
-  const checks = useMemo(() => (model ? runChecks(model, asOf) : null), [model, asOf]);
+  const allChecks = useMemo(() => (model ? runChecks(model, asOf) : null), [model, asOf]);
+  const checks = useMemo(() => (model && allChecks ? scopeChecks(model, allChecks, filters.factory) : null), [model, allChecks, filters.factory]);
+  const [toasts, setToasts] = useState<{ id: number; msg: string; tone: 'good' | 'warn' | 'info' }[]>([]);
+  const toastId = useRef(0); const lastToast = useRef(0);
+  const toast = useCallback((msg: string, tone: 'good' | 'warn' | 'info' = 'info') => {
+    const id = ++toastId.current; const now = Date.now(); const fast = now - lastToast.current < 1500; lastToast.current = now;
+    setToasts((t) => [...(fast ? t.slice(0, -1) : t).slice(-2), { id, msg, tone }]); setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
+  }, []);
+  const modelRef = useRef<Model | null>(model); modelRef.current = model;
   const dict = useMemo(() => ({ ...DICTIONARY, ...(model?.dictionary ?? {}) }), [model?.dictionary]);
   const help = useCallback((t: string) => dict[t] ?? DICTIONARY[t] ?? '', [dict]);
 
@@ -67,7 +79,11 @@ export function App() {
   };
   const loadDemo = () => { if (model && !window.confirm('Loading the demo workbook will REPLACE all data currently loaded. Continue?')) return; load(demoModel(), null); };
   useEffect(() => { if (model) writeSession(model); }, [model]);
-  const edit = useCallback((fn: (d: Model) => void) => { setModel((cur) => { if (!cur) return cur; const d = structuredClone(cur); fn(d); return d; }); setDirty(true); setVersion((v) => v + 1); }, []);
+  const edit = useCallback((fn: (d: Model) => void, opts?: { silent?: boolean }) => {
+    const cur = modelRef.current; if (!cur) return; const d = structuredClone(cur); fn(d); modelRef.current = d;
+    setModel(d); setDirty(true); setVersion((v) => v + 1);
+    if (!opts?.silent) { const r = impactMessage(cur, d, asOf); toast(r.msg, r.tone); }
+  }, [asOf, toast]);
 
   const openXlsx = async (file: File) => {
     try { const r = readWorkbook(await file.arrayBuffer(), file.name); load(r.model, r.wb, r.warnings, importSummary(r.model)); }
@@ -95,27 +111,43 @@ export function App() {
   const exportD = async () => { if (model && checks) download('Factory Dashboard Summary.docx', await buildDocx(model, filters, checks), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); };
 
   const goTo = useCallback((t: FocusTarget) => { setWs(t.ws); setFocus({ ...t }); setTimeout(() => setFocus((f) => (f === null || f.ref !== t.ref ? f : null)), 6000); }, []);
-  const ctx = useMemo(() => model && checks ? { model, edit, checks, filters, setFilters: (p: Partial<ScopeFilters>) => setF((f) => ({ ...f, ...p })), focus, goTo, help, asOf } : null, [model, edit, checks, filters, focus, goTo, help, asOf]);
+  const scopeCells = useMemo(() => (model ? calcCells(model, 'model').filter((c) => filters.factory === 'All' || c.factory === filters.factory) : []), [model, filters.factory]);
+  const status = useMemo(() => { const v = verdictOf(scopeCells, checks?.counts.ERROR ?? 0); return { verdict: v, reason: statusReason(v, scopeCells, checks?.counts.ERROR ?? 0, filters.factory) }; }, [scopeCells, checks, filters.factory]);
+  const ready = useMemo(() => (checks ? readiness(checks) : { pct: 0, errors: 0, clear: 0 }), [checks]);
+  const ctx = useMemo(() => model && checks ? { model, edit, checks, filters, setFilters: (p: Partial<ScopeFilters>) => setF((f) => ({ ...f, ...p })), focus, goTo, help, asOf, status, ready, toast } : null, [model, edit, checks, filters, focus, goTo, help, asOf, status, ready, toast]);
 
   const pill = !handle ? (dirty ? { t: 'Unsaved changes · not linked', c: '#c98a00' } : { t: 'No auto-save linked', c: '#5d6b79' })
     : save.kind === 'saving' || dirty ? { t: save.kind === 'saving' ? 'Saving…' : 'Unsaved changes', c: '#c98a00' } : save.kind === 'error' ? { t: `Save failed: ${save.msg}`, c: '#c0392b' } : { t: `Saved ${save.at ?? ''}`, c: '#1f8a4c' };
 
+  const VC = { GOOD: '#059669', WATCH: '#D97706', BAD: '#E11D48' } as const;
   const header = (
-    <header className="no-print bg-steel-900 text-white px-4 py-2 flex flex-wrap items-center gap-2">
-      <div className="font-bold text-[15px] mr-2">Factory Dashboard &amp; Flow Hub <span className="font-normal text-steel-300 text-xs">V1 · offline</span></div>
-      {model && <span className="text-xs text-steel-300 mr-auto" data-testid="source-name">{model.sourceName}</span>}
-      {!model && <span className="mr-auto" />}
-      {model && <>
-        <button className="btn" onClick={() => fileRef.current?.click()}>Open .xlsx</button>
-        <button className="btn" onClick={loadDemo}>Load Demo Workbook</button>
-        <button className="btn" onClick={link}>Link Auto-Save (.json)</button>
-        <span data-testid="save-pill" role="status" className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: pill.c }}>{pill.t}</span>
-        <button className="btn" onClick={exportX}>Export .xlsx</button>
-        <button className="btn" onClick={exportD}>Export .docx</button>
-        <button className="btn" onClick={() => window.print()}>Print summary</button>
-        <button className="px-3 py-1.5 rounded border border-red-300 bg-red-700 text-white font-semibold hover:bg-red-800 text-[13px]" data-testid="clear-all" onClick={clearAll}>Clear All Data</button>
-      </>}
-    </header>
+    <div className="no-print sticky top-0 z-40 shadow-md" style={{ background: '#0F172A' }}>
+      <header className="text-white px-4 py-2 flex flex-wrap items-center gap-2">
+        <div className="font-bold text-[15px] mr-1">Factory Dashboard &amp; Flow Hub</div>
+        {model && <label className="flex items-center gap-1 bg-white/10 rounded px-2 py-1 min-w-[220px]" title="Click to edit the Model / Programme Name">
+          <span aria-hidden>✎</span><input aria-label="Model / Programme Name" data-testid="programme-name" className="bg-transparent outline-none text-white placeholder-slate-400 w-full font-semibold" placeholder="Name this model / programme"
+            value={model.programmeName} onChange={(e) => edit((d) => { d.programmeName = e.target.value; }, { silent: true })} /></label>}
+        {model && <span className="text-xs text-slate-400 mr-auto" data-testid="source-name">{model.sourceName}</span>}
+        {!model && <span className="mr-auto" />}
+        {model && <>
+          <button className="btn" onClick={() => fileRef.current?.click()}>Open .xlsx</button>
+          <button className="btn" onClick={loadDemo}>Load Demo Workbook</button>
+          <button className="btn" onClick={link}>Link Auto-Save (.json)</button>
+          <span data-testid="save-pill" role="status" className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: pill.c }}>{pill.t}</span>
+          <button className="btn" onClick={exportX}>Export .xlsx</button>
+          <button className="btn" onClick={exportD}>Export .docx</button>
+          <button className="btn" onClick={() => window.print()}>Print summary</button>
+          <button className="px-3 py-1.5 rounded border border-red-300 bg-red-700 text-white font-semibold hover:bg-red-800 text-[13px]" data-testid="clear-all" onClick={clearAll}>Clear All Data</button>
+        </>}
+      </header>
+      {model && <div className="px-4 pb-2 flex flex-wrap items-center gap-3 text-white" data-testid="command-bar">
+        <div data-testid="factory-filter"><Seg label="Global factory filter" value={filters.factory} options={['All', ...factoriesOf(model)]} onChange={(v) => setF((f) => ({ ...f, factory: v }))} /></div>
+        <span data-testid="status-pill" data-verdict={status.verdict} className="px-3 py-1 rounded font-bold text-[13px]" style={{ background: VC[status.verdict] }}>Overall: {status.verdict} — {status.reason}</span>
+        <span className="flex items-center gap-2 text-xs" data-testid="readiness" title="Share of the 34 Data Checks with no ERROR or WARN flag">
+          <span>Data readiness</span><span className="inline-block w-32 h-2.5 rounded bg-slate-600 overflow-hidden"><span className="block h-full" style={{ width: `${ready.pct}%`, background: ready.errors ? '#D97706' : '#059669' }} /></span>
+          <b data-testid="readiness-pct">{ready.pct}% complete</b><span className={ready.errors ? 'text-rose-300 font-semibold' : 'text-emerald-300'} data-testid="readiness-errors">{ready.errors} critical error{ready.errors === 1 ? '' : 's'} left</span></span>
+      </div>}
+    </div>
   );
   const hidden = <><input ref={fileRef} type="file" accept=".xlsx,.xlsm" hidden data-testid="xlsx-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openXlsx(f); e.target.value = ''; }} />
     <input ref={jsonRef} type="file" accept=".json" hidden data-testid="json-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openJson(f); e.target.value = ''; }} /></>;
@@ -156,13 +188,13 @@ export function App() {
             </div>
             {gapOpen && <ul className="mt-2 max-h-44 overflow-auto divide-y divide-steel-100 border border-steel-200 rounded" data-testid="gap-list">
               {sorted.length === 0 && <li className="p-2 text-good font-semibold">No gaps found. All 34 Data Checks are clear.</li>}
-              {sorted.map((i, k) => <li key={k}><button className="w-full text-left px-2 py-1 hover:bg-amber-50 flex gap-2 items-baseline" data-testid="gap-item" onClick={() => i.target && goTo(i.target)}>
-                <span className="chip shrink-0" style={{ background: SEV_COL[i.severity] }}>{i.severity}</span><span className="text-steel-500 shrink-0 w-10">{i.rule}</span><span>{i.message}</span>
-                {i.target && <span className="ml-auto text-accent shrink-0">Go to → WS{i.target.ws}</span>}</button></li>)}
+              {sorted.map((i, k) => <li key={k}><div role="button" tabIndex={0} className="w-full text-left px-2 py-1 hover:bg-amber-50 flex gap-2 items-baseline cursor-pointer" data-testid="gap-item" onClick={() => i.target && goTo(i.target)} onKeyDown={(e) => e.key === 'Enter' && i.target && goTo(i.target)}>
+                <span className="chip shrink-0" style={{ background: SEV_COL[i.severity] }}>{i.severity}</span><span className="shrink-0 rounded bg-slate-100 text-slate-500 text-[10px] px-1 py-0.5 border border-slate-200" title={i.rule}>{i.rule}</span><span className="font-medium">{i.message}</span><span onClick={(e) => e.stopPropagation()}><Info text={RULES.find((r) => r.id === i.rule)?.help} term={RULES.find((r) => r.id === i.rule)?.plain} /></span>
+                {i.target && <span className="ml-auto text-accent shrink-0">Go to →</span>}</div></li>)}
             </ul>}
             <details className="mt-2" data-testid="rules-table"><summary className="cursor-pointer text-xs font-semibold text-steel-700">All 34 Data Check rules{ruleFilter ? ` (filtered to ${ruleFilter})` : ''}</summary>
               <div className="max-h-56 overflow-auto border border-steel-200 rounded mt-1"><table className="w-full text-xs"><thead><tr><th className="th">#</th><th className="th">Severity</th><th className="th">Rule</th><th className="th">Where</th><th className="th">Flags</th></tr></thead><tbody>
-                {RULES.map((r, i) => <tr key={r.id} className={checks.perRule[r.id] ? 'bg-amber-50' : ''}><td className="td">{i + 1}</td><td className="td"><span className="chip" style={{ background: SEV_COL[r.severity] }}>{r.severity}</span></td><td className="td">{r.title}</td><td className="td">{r.where}</td>
+                {RULES.map((r, i) => <tr key={r.id} className={checks.perRule[r.id] ? 'bg-amber-50' : ''}><td className="td">{i + 1}</td><td className="td"><span className="chip" style={{ background: SEV_COL[r.severity] }}>{r.severity}</span></td><td className="td"><span className="font-medium">{r.plain}</span> <Info text={r.help} term={`${r.id}: ${r.plain}`} /><div className="text-[10px] text-slate-400">{r.title}</div></td><td className="td">{r.where}</td>
                   <td className="td"><button className="underline text-accent" disabled={!checks.perRule[r.id]} onClick={() => { setRuleFilter(ruleFilter === r.id ? '' : r.id); setGapOpen(true); }}>{checks.perRule[r.id]}</button></td></tr>)}</tbody></table></div></details>
           </section>
           {summary && <section className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1" data-testid="import-summary" aria-label="Import summary">
@@ -175,8 +207,10 @@ export function App() {
           </nav>
         </div>
         <main className="flex-1 p-4 no-print" data-testid={`workspace-${ws}`}>
-          {ws === 1 && <WsDashboard />}{ws === 2 && <WsData />}{ws === 3 && <WsCompare />}{ws === 4 && <WsFlow />}{ws === 5 && <WsSensitivity />}{ws === 6 && <WsGovernance />}
+          {ws === 1 && <><WsDashboard /><div className="mt-4"><WsCompare /></div></>}{ws === 2 && <WsData />}{ws === 3 && <WsFlow />}{ws === 4 && <><WsGovernance /><div className="mt-4"><WsSensitivity /></div><div className="mt-4"><SelfTestDrawer /></div></>}
         </main>
+        <div aria-live="polite" className="no-print fixed bottom-4 right-4 z-50 flex flex-col gap-2" data-testid="toasts">
+          {toasts.map((t) => <div key={t.id} role="status" className="rounded shadow-lg px-4 py-2 text-white text-[13px] max-w-sm" style={{ background: t.tone === 'good' ? '#047857' : t.tone === 'warn' ? '#B45309' : '#1E293B' }}>{t.msg}</div>)}</div>
         <PrintSummary />
       </div>
     </AppCtx.Provider>

@@ -17,7 +17,7 @@ export function fpdCalc(m: Model, p: Fpd, uplift = 0): FpdCalc {
   const whd = whdFor(m, p), h = num(p.hours), v = num(p.volume);
   if (h === null || v === null || v <= 0 || whd === null || whd <= 0) return { fpd: p, ok: false, ltUnit: 0, duration: 0, rate: 0, wip: 0 };
   const ltUnit = (h / v / whd) * (1 + uplift);
-  const factory = m.assets.find((a) => a.cell === p.cell)?.factory ?? '';
+  const factory = m.assets.find((a) => a.cell === (p.route[0] ?? p.cell))?.factory ?? '';
   const weeks = weeksFor(m, factory) ?? 46;
   const rate = v / (weeks * 5);
   return { fpd: p, ok: true, ltUnit, duration: ltUnit * v, rate, wip: rate * ltUnit };

@@ -7,8 +7,9 @@ import { Card, Empty, Field, FocusRow, NumInput, Sel, Th } from './kit';
 import { factoriesOf } from '../engine/calc';
 
 export function WsSensitivity() {
-  const { model, edit, focus } = useApp();
-  const pl = pressureList(model); const sets = testSets(model); const rel = releaseCandidates(model);
+  const { model, edit, focus, filters } = useApp();
+  const inScope = (f: string) => filters.factory === 'All' || f === filters.factory;
+  const pl = pressureList(model).filter((p) => inScope(p.c.asset.factory)); const sets = testSets(model); const rel = releaseCandidates(model).filter((c) => inScope(c.asset.factory));
   const facs = factoriesOf(model);
   const assetKey = (f: string, c: string, a: string) => `${f}|${c}|${a}`;
   const assetOpts = model.assets.map((a) => assetKey(a.factory, a.cell, a.asset));
@@ -38,7 +39,7 @@ export function WsSensitivity() {
 
     <Card title="What-If Scenario log" term="Scenario" right={<button className="btn-p" onClick={() => edit((d) => d.scenarios.push({ id: `S${Date.now().toString(36)}`, name: `Scenario ${d.scenarios.length + 1}`, factory: '', cell: '', asset: '', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '', note: '', reroute: 0 }))}>+ Log scenario</button>}>
       <div className="overflow-auto"><table className="w-full min-w-[1100px]"><thead><tr><Th>Scenario</Th><Th>Asset</Th><Th>Load %</Th><Th>OEE pts</Th><Th>+Machines</Th><Th>Shift</Th><Th>Re-route (h)</Th><Th>Before</Th><Th>After</Th><Th>Cell before → after</Th><th className="th" /></tr></thead>
-        <tbody>{model.scenarios.map((s, i) => { const r = scenarioResult(model, s); return <FocusRow key={s.id} match={focus?.kind === 'scenario' && focus.ref === s.id}>
+        <tbody>{model.scenarios.map((s, i) => { if (!inScope(s.factory) && s.factory) return null; const r = scenarioResult(model, s); return <FocusRow key={s.id} match={focus?.kind === 'scenario' && focus.ref === s.id}>
           <td className="td w-44"><input aria-label="Scenario name" className="inp" value={s.name} onChange={(e) => edit((d) => { d.scenarios[i].name = e.target.value; })} /></td>
           <td className="td w-64"><Sel label="Scenario asset" value={s.asset ? assetKey(s.factory, s.cell, s.asset) : ''} options={assetOpts} onChange={(v) => { const [f, c, a] = v.split('|'); edit((d) => { Object.assign(d.scenarios[i], { factory: f ?? '', cell: c ?? '', asset: a ?? '' }); }); }} /></td>
           <td className="td w-20"><NumInput pct gap={false} label="Scenario load change" value={s.loadPct} onChange={(v) => edit((d) => { d.scenarios[i].loadPct = v ?? 0; })} /></td>

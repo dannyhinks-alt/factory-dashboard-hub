@@ -3,6 +3,7 @@ import type { Asset, Model, Rating } from './types';
 
 export function emptyModel(sourceName = 'New workbook'): Model {
   return {
+    programmeName: '', contextBrief: '', factoryRoles: {},
     assets: [], cellLines: [], fpds: [], links: [], levers: ['Set A', 'Set B', 'Set C'].map((id) => ({ id, name: id, factory: '', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '' })), scenarios: [], register: [],
     settings: { plannedWeeks: { HT: null, DPF: null }, oeeMode: 'Model', stressTest: false, stressPct: 0.1, limits: { ...DEFAULT_LIMITS }, shiftHours: { ...DEFAULT_SHIFT_HOURS }, defaultWhd: null, lowUtilThreshold: 0.4,
       confirmed: Object.fromEntries(PLACEHOLDERS.map((p) => [p, false])), lists: structuredClone(DEFAULT_LISTS), defaultComplexity: 'Standard', costEntries: [] },
@@ -47,7 +48,11 @@ export function demoModel(): Model {
   m.settings.lists.Factories = ['HT', 'DPF']; m.settings.lists.Cells = m.cellLines.map((c) => c.cell); m.settings.lists.Assets = m.assets.map((a) => a.asset);
   m.settings.costEntries = [{ id: 'K1', asset: 'Weld Robot 1', cost: 320000, unc: 0.2, raw: '320000' }];
   m.assessor.cells = ['02_HTMF_UTAQW', '04_DPF_WELDG'];
-  m.fpds = fp.map(([name, cell, , hours, volume], i) => ({ id: `FPD-${String(i + 1).padStart(2, '0')}`, name, cell, hours, volume, whd: i === 8 ? null : 7.5, version: 'v1', date: '2026-01-15' }));
+  m.programmeName = 'Demo programme';
+  m.contextBrief = 'HT heat-treats and DPF machines and welds one Product Family of forged parts. We plan 48 weeks a year to check capacity, Passport alignment and flow before committing investment.';
+  m.factoryRoles = { HT: 'Heat treatment: vacuum hardening, quench and temper', DPF: 'Machining, welding and final test' };
+  m.fpds = fp.map(([name, cell, , hours, volume], i) => ({ id: `FPD-${String(i + 1).padStart(2, '0')}`, name, cell, route: [cell], hours, volume, whd: i === 8 ? null : 7.5, version: 'v1', date: '2026-01-15' }));
+  m.fpds[2].route = ['02_HTMF_UTAQW', '07_DPF_MACHN']; // cross-factory product family
   const L = (p: number, c: number, rule: 'Complete' | 'After N units' | 'Overlap %', param: number | null, t: number, adj: number) => ({ id: `L${m.links.length + 1}`, parent: `FPD-${String(p).padStart(2, '0')}`, child: `FPD-${String(c).padStart(2, '0')}`, rule, param, transferDays: t, adjustTakts: adj });
   m.links = [L(1, 2, 'Complete', null, 1, 0), L(1, 3, 'After N units', 30, 0.5, 0), L(2, 4, 'Overlap %', 40, 0, 0), L(1, 5, 'Complete', null, 2, 0), L(3, 6, 'Complete', null, 0.5, 0),
     L(4, 7, 'Overlap %', 25, 0, 0), L(5, 8, 'Complete', null, 1, 0), L(6, 8, 'After N units', 60, 0, 0), L(7, 9, 'Complete', null, 1, 0), L(8, 10, 'Complete', null, 0.5, 0), L(9, 10, 'Complete', null, 0, 0)];

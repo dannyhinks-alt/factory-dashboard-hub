@@ -3,10 +3,11 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; }
-body { @apply bg-steel-50 text-ink font-sans text-[13px]; }
+body { @apply font-sans text-[13px]; background: #F1F5F9; color: #0F172A; font-variant-numeric: tabular-nums; }
 @layer components {
-  .card { @apply bg-white border border-steel-200 rounded shadow-sm; }
-  .card-h { @apply px-3 py-2 border-b border-steel-200 font-semibold text-steel-700 flex items-center gap-2 bg-steel-100 rounded-t; }
+  .card { @apply bg-white rounded-md shadow-sm; border: 1px solid #E2E8F0; }
+  .card-h { @apply px-3 py-2 font-semibold flex items-center gap-2 rounded-t; color: #1E293B; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; }
+  .accent-good { border-left: 4px solid #059669; } .accent-watch { border-left: 4px solid #D97706; } .accent-bad { border-left: 4px solid #E11D48; } .accent-none { border-left: 4px solid #94A3B8; }
   .btn { @apply px-3 py-1.5 rounded border border-steel-300 bg-white hover:bg-steel-100 text-ink text-[13px] disabled:opacity-40; }
   .btn-p { @apply px-3 py-1.5 rounded bg-accent text-white hover:bg-blue-800 text-[13px] font-medium disabled:opacity-40; }
   .inp { @apply border border-steel-300 rounded px-1.5 py-1 bg-white text-[13px] w-full min-w-0 focus:outline-none focus:ring-2 focus:ring-accent; }

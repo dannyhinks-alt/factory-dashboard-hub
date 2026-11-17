@@ -73,4 +73,4 @@ Dashboard, Compare, Data, Assessor, FPD, Lead time, Sensitivity, Levers, Scenari
 ---
 
 ## 7. Layout
-`src/engine` is pure TypeScript (calc, flow, checks, sensitivity, governance, selftest, xlsx, importXlsx). `src/ui` holds the six workspaces. Tests are in `tests/` and `e2e/`.
+`src/engine` is pure TypeScript (calc, flow, checks, sensitivity, governance, selftest, xlsx, importXlsx). `src/ui` holds the four workspaces (Overall Status, Data & Gap Filler, Product Flow, Gates / Scenarios / Register). Tests are in `tests/` and `e2e/`.

@@ -93,3 +93,31 @@ export function FlowMap({ flow, links, names }: { flow: FlowResult; links: { par
     {links.filter((l) => flow.sched[l.parent] && flow.sched[l.child]).map((l, i) => { const a = pos(l.parent), b = pos(l.child), c = critEdge(l); return <line key={i} x1={a.x + 26} y1={a.y} x2={b.x - 28} y2={b.y} stroke={c ? '#c0392b' : '#8a97a5'} strokeWidth={c ? 2.5 : 1.2} markerEnd={`url(#${c ? 'arrc' : 'arr'})`} />; })}
     {ids.map((id) => { const p = pos(id), c = crit.has(id); return <g key={id}><rect x={p.x - 28} y={p.y - 14} width={56} height={28} rx={4} fill={c ? '#c0392b' : '#fff'} stroke={c ? '#c0392b' : '#5d6b79'} /><text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="11" fontWeight={600} fill={c ? '#fff' : '#1b2430'}>{id}<title>{names[id]}</title></text></g>; })}</Svg>;
 }
+
+/** Diverging bars centred on 0%: overloaded cells extend left (rose), spare headroom extends right (emerald). */
+export function DivergingBars({ rows, label }: { rows: { label: string; value: number | null; tag: string }[]; label: string }) {
+  const vals = rows.map((r) => r.value).filter((v): v is number => v !== null);
+  if (!vals.length) return <div className="text-steel-500 p-4">No data to chart.</div>;
+  const ext = Math.max(0.1, ...vals.map((v) => Math.abs(v))), L = 170, R = W - 120, mid = (L + R) / 2, half = (R - L) / 2, bh = 20, H = rows.length * (bh + 14) + 30;
+  const x = (v: number) => mid + (Math.max(-ext, Math.min(ext, v)) / ext) * half;
+  return <Svg h={H} label={label}>
+    <rect x={L} y={0} width={mid - L} height={H - 22} fill="#FFF1F2" /><rect x={mid} y={0} width={R - mid} height={H - 22} fill="#ECFDF5" />
+    <line x1={mid} x2={mid} y1={0} y2={H - 22} stroke="#0F172A" strokeWidth={1.5} /><text x={mid} y={H - 6} textAnchor="middle" fontSize="10" fill="#0F172A">0%</text>
+    <text x={L + 4} y={H - 6} fontSize="10" fill="#E11D48">← overloaded</text><text x={R - 4} y={H - 6} textAnchor="end" fontSize="10" fill="#059669">spare headroom →</text>
+    {rows.map((r, i) => <g key={r.label} transform={`translate(0,${i * (bh + 14) + 6})`}>
+      <text x={L - 8} y={bh / 2 + 4} textAnchor="end" fontSize="11" fill="#1E293B">{r.label.length > 24 ? r.label.slice(0, 23) + '…' : r.label}</text>
+      {r.value === null ? <text x={mid + 6} y={bh / 2 + 4} fontSize="10" fill="#64748B">no data</text> : <>
+        <rect x={Math.min(mid, x(r.value))} width={Math.abs(x(r.value) - mid)} height={bh} rx={2} fill={r.value < 0 ? '#E11D48' : '#059669'}><title>{`${r.label}: ${(r.value * 100).toFixed(1)}%`}</title></rect>
+        <text x={r.value < 0 ? x(r.value) - 4 : x(r.value) + 4} y={bh / 2 + 4} textAnchor={r.value < 0 ? 'end' : 'start'} fontSize="10" fontWeight={600} fill="#0F172A">{(r.value * 100).toFixed(1)}%</text></>}
+      <text x={R + 8} y={bh / 2 + 4} fontSize="10" fill="#475569">{r.tag}</text></g>)}
+  </Svg>;
+}
+
+export function Ring({ value, size = 84, label }: { value: number | null; size?: number; label: string }) {
+  const r = size / 2 - 8, c = 2 * Math.PI * r, v = value === null ? 0 : Math.min(1, Math.max(0, value));
+  const col = value === null ? '#94A3B8' : value > 1 ? '#E11D48' : value > 0.85 ? '#D97706' : '#059669';
+  return <svg role="img" aria-label={label} width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E2E8F0" strokeWidth={8} />
+    <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={col} strokeWidth={8} strokeLinecap="round" strokeDasharray={`${c * v} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+    <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize="15" fontWeight={700} fill="#0F172A">{value === null ? '–' : `${Math.round(value * 100)}%`}</text></svg>;
+}

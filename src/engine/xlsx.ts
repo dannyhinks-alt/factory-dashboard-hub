@@ -64,6 +64,9 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
     else if (l.startsWith('stress test')) m.settings.stressPct = frac(v) ?? 0.1;
     else if ((mm = label.match(/^limit\s*(?:-|:|–)?\s*(.+)$/i))) { m.settings.limits[mm[1].trim()] = frac(v); sawLimits = true; }
     else if ((mm = label.match(/^shift hours\s*(?:-|:|–)?\s*(.+)$/i))) { m.settings.shiftHours[mm[1].trim()] = toNum(v); sawShift = true; }
+    else if (l === 'programme name') m.programmeName = str(v);
+    else if (l === 'context brief') m.contextBrief = str(v);
+    else if ((mm = label.match(/^factory role\s*(?:-|:|–)?\s*(.+)$/i))) m.factoryRoles[mm[1].trim().toUpperCase()] = str(v);
     else if (l.startsWith('default complexity')) m.settings.defaultComplexity = str(v);
     else if (l.startsWith('default working hours')) m.settings.defaultWhd = toNum(v);
     else if (l.startsWith('low utilisation') || l.startsWith('low-utilisation')) m.settings.lowUtilThreshold = frac(v);
@@ -82,11 +85,14 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
   m.assets = dsr.assets; m.cellLines = dsr.cellLines;
   m.assets.forEach((a) => { if (a.factory && m.settings.plannedWeeks[a.factory] === undefined) m.settings.plannedWeeks[a.factory] = null; });
   // ---- FPD
-  m.fpds = table(rowsOf(wb, 'FPD'), { id: ['fpd', 'fpdid', 'fpdno'], name: ['name', 'description', 'fpdname'], cell: ['cell'], hours: ['hours', 'totalhours'], volume: ['volume', 'units'], whd: ['workinghoursperday', 'workinghday', 'whd'], ver: ['version'], date: ['date'] }, ['id', 'hours'])
-    .filter((r) => str(r.id)).map((r) => ({ id: FPD_ID(r.id), name: str(r.name), cell: str(r.cell), hours: toNum(r.hours), volume: toNum(r.volume), whd: toNum(r.whd), version: str(r.ver), date: isoDate(r.date) }));
+  const skipped = new Set<string>(); // unpopulated template rows on the FPD tab
+  m.fpds = table(rowsOf(wb, 'FPD'), { id: ['fpd', 'fpdid', 'fpdno'], name: ['name', 'description', 'fpdname'], cell: ['cell', 'cells', 'route'], hours: ['hours', 'totalhours'], volume: ['volume', 'units'], whd: ['workinghoursperday', 'workinghday', 'whd'], ver: ['version'], date: ['date'] }, ['id', 'hours'])
+    .filter((r) => { if (!str(r.id)) return false; const nm = str(r.name).toLowerCase(); const blank = (!nm || /^x+$/.test(nm)) && toNum(r.hours) === null && toNum(r.volume) === null; if (blank) skipped.add(FPD_ID(r.id)); return !blank; })
+    .map((r) => { const route = str(r.cell).split(/[;|>,]/).map((x) => x.trim()).filter(Boolean); return { id: FPD_ID(r.id), name: str(r.name), cell: route[0] ?? '', route, hours: toNum(r.hours), volume: toNum(r.volume), whd: toNum(r.whd), version: str(r.ver), date: isoDate(r.date) }; });
   // ---- Links
   id = 0;
   m.links = table(rowsOf(wb, 'Lead time'), { parent: ['parentfpd', 'parent'], child: ['childfpd', 'child'], rule: ['startrule', 'rule'], param: ['n', 'value', 'param', 'noverlap', 'nunitsoverlap'], transfer: ['transferdays', 'transfer'], adjust: ['adjustintakts', 'adjust'] }, ['parent', 'child'])
+    .filter((r) => { const p = FPD_ID(r.parent), c = FPD_ID(r.child); const typed = str(r.rule) || toNum(r.param) !== null || toNum(r.transfer) || toNum(r.adjust); if (!p && !c) return false; if (/^x+$/i.test(p) || /^x+$/i.test(c)) return false; if (!typed && (p === c || skipped.has(p) || skipped.has(c))) return false; return true; })
     .map((r) => ({ id: `L${++id}`, parent: FPD_ID(r.parent), child: FPD_ID(r.child), rule: pickRule(r.rule), param: toNum(r.param), transferDays: toNum(r.transfer) ?? 0, adjustTakts: toNum(r.adjust) ?? 0 }));
   // ---- Levers
   const lv = table(rowsOf(wb, 'Levers'), { id: ['set'], name: ['name', 'description'], factory: ['scopefactory', 'factory'], load: ['loadchange', 'loadchangepct'], oee: ['oeechangepts', 'oeechange'], machines: ['machinesadded', 'machinesadd'], shift: ['shiftpattern', 'shift'] }, ['id', 'load']);
@@ -100,9 +106,9 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
     .map((r, i) => ({ id: str(r.id) || `R${String(i + 1).padStart(2, '0')}`, type: pickType(r.type), title: str(r.title), owner: str(r.owner), timeImpact: toNum(r.t), costImpact: toNum(r.c), due: isoDate(r.due), status: str(r.status) || 'Open', link: str(r.link), probability: toNum(r.prob) }));
   // ---- Assessor
   const arows = rowsOf(wb, 'Assessor');
-  table(arows, { gate: ['gate'], theme: ['themeno', 'theme'], rating: ['rating'] }, ['gate', 'theme', 'rating']).forEach((r) => {
+  table(arows, { gate: ['gate'], theme: ['themeno', 'theme'], rating: ['rating'], rcell: ['ratedcell'] }, ['gate', 'theme', 'rating']).forEach((r) => {
     const g = GATES.find((x) => x.toLowerCase() === str(r.gate).toLowerCase()); const t = Math.round(toNum(r.theme) ?? 0);
-    if (g && t >= 1 && t <= THEMES.length) m.assessor.ratings[`${g}|${t}`] = pickRating(r.rating);
+    if (g && t >= 1 && t <= THEMES.length) m.assessor.ratings[`${str(r.rcell) ? str(r.rcell) + '::' : ''}${g}|${t}`] = pickRating(r.rating);
   });
   table(arows, { gate: ['evidencegate'], e1: ['evidence1'], e2: ['evidence2'], e3: ['evidence3'], e4: ['evidence4'], e5: ['evidence5'], e6: ['evidence6'] }, ['gate', 'e1']).forEach((r) => {
     const g = GATES.find((x) => x.toLowerCase() === str(r.gate).toLowerCase());
@@ -129,7 +135,7 @@ export function buildSheets(m: Model, uplift = 0): Record<string, XLSX.WorkSheet
   const S: Record<string, XLSX.WorkSheet> = {};
   const title = (t: string) => [[t], ['Edit the blue-header tables only; engine outputs are regenerated on export.'], []];
   // Settings
-  const set: unknown[][] = [['SETTINGS'], ['Label', 'Value'], ...Object.entries(m.settings.plannedWeeks).map(([f, v]) => [`Planned Weeks ${f}`, o(v)]),
+  const set: unknown[][] = [['SETTINGS'], ['Label', 'Value'], ['Programme Name', m.programmeName], ['Context Brief', m.contextBrief], ...Object.entries(m.factoryRoles).map(([f, r]) => [`Factory Role ${f}`, r]), ...Object.entries(m.settings.plannedWeeks).map(([f, v]) => [`Planned Weeks ${f}`, o(v)]),
     ['OEE Mode', m.settings.oeeMode], ['Apply Capacity Stress Test', m.settings.stressTest ? 'YES' : 'NO'], ['Stress Test %', m.settings.stressPct],
     ...Object.entries(m.settings.limits).map(([k, v]) => [`Limit ${k}`, o(v)]), ...Object.entries(m.settings.shiftHours).map(([k, v]) => [`Shift Hours ${k}`, o(v)]),
     ['Default Complexity Class', m.settings.defaultComplexity], ['Default Working Hours per Day', o(m.settings.defaultWhd)], ['Low Utilisation Threshold', o(m.settings.lowUtilThreshold)],
@@ -138,7 +144,7 @@ export function buildSheets(m: Model, uplift = 0): Record<string, XLSX.WorkSheet
   m.settings.costEntries.forEach((k, i) => { while (set.length < i + 3) set.push([]); const row = set[i + 2]; while (row.length < 2) row.push(''); row.push('', k.asset, k.raw !== '' && k.cost === null ? k.raw : o(k.cost), o(k.unc)); });
   S.Settings = sheet(set, [36, 40]);
   S.Data = sheet(dataSheetAoa(m), [10, 18, 26, 22, 18, 10, 14, 12, 12, 16, 14, 12, 10, 14, 16, 16, 14, 12, 12, 12, 14, 14]);
-  S.FPD = sheet([...title('FPD: FLOW PRODUCT DEFINITIONS'), ['FPD', 'Name', 'Cell', 'Hours', 'Volume', 'Working h/day', 'Version', 'Date'], ...m.fpds.map((p) => [p.id, p.name, p.cell, o(p.hours), o(p.volume), o(p.whd), p.version, p.date])], [10, 28, 18, 10, 10, 14]);
+  S.FPD = sheet([...title('FPD: FLOW PRODUCT DEFINITIONS'), ['FPD', 'Name', 'Cell', 'Hours', 'Volume', 'Working h/day', 'Version', 'Date'], ...m.fpds.map((p) => [p.id, p.name, p.route.join('; '), o(p.hours), o(p.volume), o(p.whd), p.version, p.date])], [10, 28, 18, 10, 10, 14]);
   const flow = solve(m, uplift);
   S['Lead time'] = sheet([...title('LEAD TIME & DEPENDENCIES'), ['Parent FPD', 'Child FPD', 'Start rule', 'N / Overlap %', 'Transfer days', 'Adjust in takts', '', 'Result FPD', 'Lead time (days/unit)', 'Duration (days)', 'Start (day)', 'End (day)', "WIP (Little's Law)"],
     ...Array.from({ length: Math.max(m.links.length, m.fpds.length) }, (_, i) => { const l = m.links[i], p = m.fpds[i]; const c = p ? flow.calcs[p.id] : undefined, s = p ? flow.sched[p.id] : undefined;
@@ -147,10 +153,11 @@ export function buildSheets(m: Model, uplift = 0): Record<string, XLSX.WorkSheet
   S.Levers = sheet([...title('LEVER SETS'), ['Set', 'Name', 'Scope Factory', 'Load Change %', 'OEE Change (pts)', 'Machines Added', 'Shift Pattern'], ...m.levers.map((s) => [s.id, s.name, s.factory || 'All', s.loadPct, s.oeePts, s.machinesAdd, s.shift])], [10, 24, 14, 14, 16, 16, 16]);
   S.Scenarios = sheet([...title('SCENARIO LOG'), ['Scenario', 'Factory', 'Cell', 'Asset', 'Load Change %', 'OEE Change (pts)', 'Machines Added', 'Shift Pattern', 'Note', 'Re-route (h)'], ...m.scenarios.map((s) => [s.name, s.factory, s.cell, s.asset, s.loadPct, s.oeePts, s.machinesAdd, s.shift, s.note, s.reroute])], [26, 10, 18, 20, 14, 16, 16, 16, 30]);
   S.Register = sheet([...title('RISKS, ASSUMPTIONS, OPPORTUNITIES & ACTIONS'), ['Ref', 'Type', 'Title', 'Owner', 'Time Impact', 'Cost Impact', 'Due Date', 'Status', 'Linked Cell/FPD', 'Probability (1-5)'], ...m.register.map((r) => [r.id, r.type, r.title, r.owner, o(r.timeImpact), o(r.costImpact), r.due, r.status, r.link, o(r.probability)])], [8, 12, 40, 22, 12, 12, 12, 12, 18]);
-  const ar: unknown[][] = []; GATES.forEach((g) => THEMES.forEach((t, i) => ar.push([g, i + 1, t, m.assessor.ratings[`${g}|${i + 1}`] ?? '', '', ...(i === 0 || true ? [] : [])])));
+  const ar: unknown[][] = []; GATES.forEach((g) => THEMES.forEach((t, k) => ar.push([g, k + 1, t, m.assessor.ratings[`${g}|${k + 1}`] ?? '', ''])));
+  Object.entries(m.assessor.ratings).filter(([k]) => k.includes('::')).forEach(([k, v]) => { const [cell, rest] = k.split('::'); const [g, t] = rest.split('|'); ar.push([g, Number(t), THEMES[Number(t) - 1] ?? '', v, cell]); });
   const evRows = GATES.map((g) => [g, ...(m.assessor.evidence[g] ?? Array(6).fill(false)).map((b) => (b ? 'YES' : ''))]);
-  const aoa: unknown[][] = [...title('GATE ASSESSOR'), ['Gate', 'Theme No', 'Theme', 'Rating', '', 'Evidence Gate', 'Evidence 1', 'Evidence 2', 'Evidence 3', 'Evidence 4', 'Evidence 5', 'Evidence 6', '', 'Assessed Cell']];
-  ar.forEach((r, i) => aoa.push([r[0], r[1], r[2], r[3], '', ...(evRows[i] ?? Array(7).fill('')), '', m.assessor.cells[i] ?? '']));
+  const aoa: unknown[][] = [...title('GATE ASSESSOR'), ['Gate', 'Theme No', 'Theme', 'Rating', 'Rated Cell', 'Evidence Gate', 'Evidence 1', 'Evidence 2', 'Evidence 3', 'Evidence 4', 'Evidence 5', 'Evidence 6', '', 'Assessed Cell']];
+  ar.forEach((r, i) => aoa.push([r[0], r[1], r[2], r[3], r[4], ...(evRows[i] ?? Array(7).fill('')), '', m.assessor.cells[i] ?? '']));
   S.Assessor = sheet(aoa, [14, 10, 40, 12, 3, 14, 10, 10, 10, 10, 10, 10]);
   // Dictionary
   const dict = { ...DICTIONARY, ...m.dictionary };

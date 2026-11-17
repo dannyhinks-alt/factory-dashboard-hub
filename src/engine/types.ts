@@ -64,7 +64,8 @@ export interface CostEntry { id: string; asset: string; cost: number | null; unc
 export interface Fpd {
   id: string; // FPD-01
   name: string;
-  cell: string;
+  cell: string; // first cell of the route (kept for lookups)
+  route: string[]; // every cell the product family passes through, possibly across factories
   hours: number | null;
   volume: number | null;
   whd: number | null;
@@ -141,6 +142,9 @@ export interface Assessor {
 }
 
 export interface Model {
+  programmeName: string;
+  contextBrief: string;
+  factoryRoles: Record<string, string>;
   assets: Asset[];
   cellLines: CellLine[];
   fpds: Fpd[];

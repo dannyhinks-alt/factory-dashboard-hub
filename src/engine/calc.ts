@@ -22,6 +22,8 @@ export interface AssetCalc {
 export type Band = 'GREEN' | 'AMBER' | 'RED' | 'NONE';
 export const band = (h: number | null): Band => (h === null ? 'NONE' : h >= GREEN_MIN ? 'GREEN' : h >= 0 ? 'AMBER' : 'RED');
 
+/** Typing 68 or 0.68 both mean 68%: values of 1 or less are fractions, larger values are percentages. */
+export const normalisePct = (n: number) => (n <= 1 ? n : n / 100);
 export const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 export const pct = (v: number | null, d = 1) => (v === null ? '–' : `${(v * 100).toFixed(d)}%`);
 export const gbp = (v: number | null) => (v === null ? '–' : `£${Math.round(v).toLocaleString('en-GB')}`);
@@ -194,7 +196,7 @@ export function compareFactory(m: Model) {
   return factoriesOf(m).map((f) => {
     const rows = compareRows(m).filter((r) => r.factory === f);
     const avg = (k: 'noOee' | 'restated' | 'model' | 'passport') => { const v = rows.map((r) => r[k]).filter((x): x is number => x !== null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
-    const fp = m.fpds.filter((p) => rows.some((r) => r.cell === p.cell));
+    const fp = m.fpds.filter((p) => (p.route.length ? p.route : [p.cell]).some((c) => rows.some((r) => r.cell === c)));
     const hours = fp.reduce((s, p) => s + (p.hours ?? 0), 0);
     const loadH = m.assets.filter((a) => a.factory === f).reduce((s, a) => s + (a.loadHrs ?? 0), 0);
     const ops = fp.length;
