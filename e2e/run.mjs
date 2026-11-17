@@ -23,6 +23,52 @@ async function fresh(ctxOpts = {}) {
 }
 const gapCount = async (page) => Number((await page.locator('[data-testid=gap-panel] span.text-steel-500', { hasText: 'flag(s)' }).innerText()).match(/(\d+) flag/)[1]);
 
+
+console.log('0. Blank start, session cache, Clear All Data, atomic wipe on import');
+{
+  const { ctx, page, errors } = await fresh();
+  await page.addInitScript(() => { window.__saves = []; window.showSaveFilePicker = async () => ({ name: 'x.json', createWritable: async () => ({ write: async (t) => window.__saves.push(t), close: async () => {} }) }); });
+  await page.reload();
+  ok(await page.getByTestId('dropzone').isVisible(), 'boots to blank state with .xlsx dropzone');
+  ok((await page.getByTestId('gap-panel').count()) === 0 && (await page.getByText('HTMF').count()) === 0, 'no demo or legacy data on boot');
+  ok(await page.evaluate(() => localStorage.length === 0), 'nothing in localStorage on first boot');
+  ok(await page.getByRole('button', { name: 'Load Demo Workbook' }).isVisible(), 'demo is an explicit secondary button');
+  await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
+  await page.getByTestId('ws-2').click();
+  ok((await page.getByLabel('Asset filter').locator('option').count()) === 1, 'empty workbook has 0 assets');
+  await page.getByTestId('ws-4').click(); ok(await page.getByText('No FPDs yet.').isVisible(), 'empty workbook has 0 FPDs');
+  await page.getByTestId('ws-6').click(); ok((await page.getByRole('button', { name: /Remove .* from Assessor/ }).count()) === 0, 'empty workbook has no assessed cells');
+  page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
+  ok(await page.getByTestId('dropzone').isVisible(), 'Clear All Data returns to blank start');
+  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  ok(await page.getByTestId('gap-panel').isVisible(), 'demo loads only on explicit click');
+  await page.reload();
+  ok(await page.getByTestId('gap-panel').isVisible() && (await page.getByTestId('source-name').innerText()) === 'Demo workbook', 'saved session restored from localStorage after reload');
+  // demo button warns when data is loaded
+  let msg = ''; page.once('dialog', async (d) => { msg = d.message(); await d.dismiss(); });
+  await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  ok(/REPLACE/.test(msg), 'demo button confirms before replacing loaded data');
+  // atomic wipe: .xlsx
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Factory', 'Cell', 'Asset'], ['ZZ', 'ONLY_CELL', 'Only Asset']]), 'Data');
+  await page.getByTestId('xlsx-input').setInputFiles({ name: 'tiny.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) });
+  await page.getByTestId('ws-2').click();
+  ok((await page.getByLabel('Asset filter').locator('option').count()) === 2, '.xlsx import replaces everything: only 1 asset remains');
+  const cached = await page.evaluate(() => JSON.parse(localStorage.getItem('factory-hub.session.v1')).model);
+  ok(cached.assets.length === 1 && cached.fpds.length === 0 && cached.register.length === 0 && cached.scenarios.length === 0 && cached.cellLines.length === 0 && cached.assessor.cells.length === 0, 'localStorage cache rewritten with no stale rows');
+  ok((await page.getByText('Vacuum Furnace').count()) === 0, 'no stale demo rows visible');
+  // atomic wipe: .json (reduced save of demo while demo is loaded again)
+  page.once('dialog', (d) => d.accept()); await page.getByRole('button', { name: 'Load Demo Workbook' }).click();
+  await page.getByRole('button', { name: 'Link Auto-Save (.json)' }).click(); await page.waitForFunction(() => window.__saves.length >= 1);
+  const j = JSON.parse(await page.evaluate(() => window.__saves[0])); Object.assign(j.model, { assets: j.model.assets.slice(0, 1), cellLines: [], fpds: [], links: [], register: [], scenarios: [] }); j.model.assessor.cells = []; j.model.settings.lists.Assets = []; j.model.settings.lists.Cells = []; j.model.settings.costEntries = []; j.model.sourceName = 'reduced.json';
+  await page.getByTestId('json-input').setInputFiles({ name: 'reduced.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(j)) });
+  await page.getByTestId('ws-2').click();
+  ok((await page.getByLabel('Asset filter').locator('option').count()) === 2 && (await page.getByText('CNC Mill').count()) === 0, '.json import replaces everything');
+  ok((await page.getByTestId('save-pill').innerText()) === 'No auto-save linked', 'import unlinks the previous auto-save file');
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await ctx.close();
+}
+
 console.log('1. Launch + demo workbook');
 {
   const { ctx, page, errors, requests } = await fresh();
