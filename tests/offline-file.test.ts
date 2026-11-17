@@ -18,6 +18,7 @@ describe('dist-offline/index.html opens on file://', () => {
     const open = html.indexOf('<script>'); // the bundle; a tiny <script id="boot-guard"> error handler precedes it in <head>
     expect(html.slice(0, open).match(/<script/g)?.length).toBe(1); expect(html.slice(0, open)).toContain('<script id="boot-guard">');
     expect((html.match(/<\/script/gi) ?? []).length).toBe(2); // only the real closing tags: none inside the JavaScript
+    expect(html).toContain('If this screen stays blank, corporate browser policy may be blocking local file:// JavaScript');
     expect(html.slice(html.lastIndexOf('</script>'))).not.toMatch(/<script/);
     expect(html.indexOf('<div id="root">')).toBeGreaterThan(-1); expect(open).toBeGreaterThan(html.indexOf('<div id="root">'));
     expect(html.lastIndexOf('</script>')).toBeLessThan(html.lastIndexOf('</body>'));
@@ -47,7 +48,7 @@ describe('dist-offline/index.html opens on file://', () => {
     const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
     try { const page = await browser.newPage(); page.on('pageerror', () => undefined); await page.goto(pathToFileURL(bad).href);
       await page.waitForSelector('#boot-error'); expect(await page.locator('#boot-error').innerText()).toContain('Simulated start-up failure 42');
-      expect(await page.locator('#root').innerText()).toContain('Simulated start-up failure 42');
+      expect(await page.locator('#root').innerText()).toContain('Simulated start-up failure 42'); expect(await page.locator('#root').innerText()).toContain('failed to load');
     } finally { await browser.close(); }
   }, 60_000);
 });
