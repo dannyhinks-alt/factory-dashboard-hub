@@ -1,4 +1,6 @@
-import { SHIFTS } from '../engine/constants';
+import { QUICK_PRESETS, SHIFTS } from '../engine/constants';
+import { cells } from '../engine/calc';
+import type { LeverSet } from '../engine/types';
 import { BandChip } from './kit';
 import { band, pct, n1 } from '../engine/calc';
 import { pressureList, releaseCandidates, scenarioResult, testSets } from '../engine/sensitivity';
@@ -7,10 +9,21 @@ import { Card, Empty, Field, FocusRow, NumInput, Sel, Th } from './kit';
 import { factoriesOf } from '../engine/calc';
 
 export function WsSensitivity() {
-  const { model, edit, focus, filters } = useApp();
+  const { model, edit, focus, filters, toast } = useApp();
   const inScope = (f: string) => filters.factory === 'All' || f === filters.factory;
   const pl = pressureList(model).filter((p) => inScope(p.c.asset.factory)); const sets = testSets(model); const rel = releaseCandidates(model).filter((c) => inScope(c.asset.factory));
   const facs = factoriesOf(model);
+  /** One scenario line per bottleneck asset of every cell in the set's scope, replacing earlier lines logged from the same set. */
+  const logSet = (set: LeverSet) => {
+    const targets = cells(model, 'model').filter((c) => c.bottleneck && (!set.factory || c.factory === set.factory));
+    if (!targets.length) { toast('Nothing to log: no cell has enough data to find a bottleneck yet', 'warn'); return; }
+    const note = `Logged from ${set.id}`;
+    edit((d) => {
+      d.scenarios = d.scenarios.filter((x) => !(x.note === note && x.name === (set.name || set.id)));
+      targets.forEach((c, k) => d.scenarios.push({ id: `S${Date.now().toString(36)}${k}`, name: set.name || set.id, factory: c.factory, cell: c.cell, asset: c.bottleneck!.asset.asset, loadPct: set.loadPct, oeePts: set.oeePts, machinesAdd: set.machinesAdd, shift: set.shift, note, reroute: 0 }));
+    });
+    toast(`Logged ${targets.length} scenario line${targets.length === 1 ? '' : 's'} from ${set.id} to the Scenario table`, 'good');
+  };
   const assetKey = (f: string, c: string, a: string) => `${f}|${c}|${a}`;
   const assetOpts = model.assets.map((a) => assetKey(a.factory, a.cell, a.asset));
   if (!model.assets.length) return <Empty>No assets yet.</Empty>;
@@ -31,7 +44,10 @@ export function WsSensitivity() {
           <Field label="Machines added"><NumInput gap={false} label={`${s.id} machines added`} value={s.machinesAdd} onChange={(v) => edit((d) => { d.levers[i].machinesAdd = v ?? 0; })} /></Field>
           <Field label="Shift pattern"><Sel label={`${s.id} shift`} gap={false} blank="Unchanged" value={s.shift} options={SHIFTS} onChange={(v) => edit((d) => { d.levers[i].shift = v; })} /></Field></div>
         <div className="mt-2 text-sm border-t pt-2"><span className="chip bg-good">{r.green} GREEN</span> <span className="chip bg-watch">{r.amber} AMBER</span> <span className="chip bg-bad">{r.red} RED</span>
-          <div className="mt-1">Worst cell: <b className="font-mono">{pct(r.worst)}</b> {r.improvement !== null && <span className={r.improvement >= 0 ? 'text-good' : 'text-bad'}>({r.improvement >= 0 ? '+' : ''}{(r.improvement * 100).toFixed(1)} pts)</span>}</div></div></div>; })}</div></Card>
+          <div className="mt-1">Worst cell: <b className="font-mono">{pct(r.worst)}</b> {r.improvement !== null && <span className={r.improvement >= 0 ? 'text-good' : 'text-bad'}>({r.improvement >= 0 ? '+' : ''}{(r.improvement * 100).toFixed(1)} pts)</span>}</div></div>
+        <div className="mt-2 border-t pt-2 grid gap-2">
+          <Sel label={`${s.id} quick preset`} gap={false} blank="Quick preset…" value="" options={Object.keys(QUICK_PRESETS)} onChange={(v) => v && edit((d) => { Object.assign(d.levers[i], QUICK_PRESETS[v]); })} />
+          <button className="btn-p" data-testid={`log-${s.id}`} onClick={() => logSet(s)}>Log to Scenario Table</button></div></div>; })}</div></Card>
 
     <Card title="Low-Utilisation release candidates" term="Low-Utilisation" right={<span className="text-xs">Below {pct(model.settings.lowUtilThreshold, 0)} of effective capacity</span>}>
       {rel.length ? <table className="w-full"><thead><tr><Th>Factory</Th><Th>Cell</Th><Th>Asset</Th><Th>Machines</Th><Th term="Effective Utilisation">Effective util.</Th></tr></thead><tbody>{rel.map((c) => <FocusRow key={c.asset.id} match={focus?.kind === 'asset' && focus.ref === c.asset.id}><td className="td">{c.asset.factory}</td><td className="td">{c.asset.cell}</td><td className="td">{c.asset.asset}</td><td className="td">{c.machines}</td><td className="td font-mono">{pct(c.effUtil)}</td></FocusRow>)}</tbody></table>

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { DEFAULT_LIMITS, DEFAULT_SHIFT_HOURS, DICTIONARY, GATES, PLACEHOLDERS, SHEETS, THEMES } from './constants';
+import { LEVER_PRESETS, DEFAULT_LIMITS, DEFAULT_SHIFT_HOURS, DICTIONARY, GATES, PLACEHOLDERS, SHEETS, THEMES } from './constants';
 import { calendarHours, cells, compareRows, costByFactory } from './calc';
 import { fpdCalc, solve } from './flow';
 import { pressureList } from './sensitivity';
@@ -96,7 +96,15 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
     .map((r) => ({ id: `L${++id}`, parent: FPD_ID(r.parent), child: FPD_ID(r.child), rule: pickRule(r.rule), param: toNum(r.param), transferDays: toNum(r.transfer) ?? 0, adjustTakts: toNum(r.adjust) ?? 0 }));
   // ---- Levers
   const lv = table(rowsOf(wb, 'Levers'), { id: ['set'], name: ['name', 'description'], factory: ['scopefactory', 'factory'], load: ['loadchange', 'loadchangepct'], oee: ['oeechangepts', 'oeechange'], machines: ['machinesadded', 'machinesadd'], shift: ['shiftpattern', 'shift'] }, ['id', 'load']);
-  if (lv.length) m.levers = lv.slice(0, 3).map((r, i) => ({ id: str(r.id) || `Set ${'ABC'[i]}`, name: str(r.name), factory: str(r.factory).replace(/^all$/i, '').toUpperCase(), loadPct: frac(r.load) ?? 0, oeePts: frac(r.oee) ?? 0, machinesAdd: toNum(r.machines) ?? 0, shift: str(r.shift) }));
+  // Populated sets from the workbook win; any set with no values yet gets a practical preset.
+  const signed = (v: unknown) => { const n = toNum(v); return n === null ? 0 : Math.abs(n) > 1 ? n / 100 : n; };
+  m.levers = LEVER_PRESETS.map((preset, k) => {
+    const r = lv.find((x) => str(x.id).replace(/\s+/g, '').toLowerCase() === preset.id.replace(/\s+/g, '').toLowerCase()) ?? lv[k];
+    if (!r) return { ...preset };
+    const sh = /^unchanged$/i.test(str(r.shift)) ? '' : str(r.shift);
+    const set = { id: preset.id, name: str(r.name), factory: str(r.factory).replace(/^all$/i, '').toUpperCase(), loadPct: signed(r.load), oeePts: signed(r.oee), machinesAdd: toNum(r.machines) ?? 0, shift: sh };
+    return set.loadPct || set.oeePts || set.machinesAdd || set.shift ? { ...set, name: set.name || preset.name } : { ...preset };
+  });
   // ---- Scenarios
   id = 0;
   m.scenarios = table(rowsOf(wb, 'Scenarios'), { name: ['scenario', 'name'], factory: ['factory'], cell: ['cell'], asset: ['asset'], load: ['loadchange', 'loadchangepct'], oee: ['oeechangepts', 'oeechange'], machines: ['machinesadded', 'machinesadd'], shift: ['shiftpattern', 'shift'], note: ['note', 'notes'], rr: ['reroute'] }, ['name', 'asset'])
@@ -150,7 +158,7 @@ export function buildSheets(m: Model, uplift = 0): Record<string, XLSX.WorkSheet
     ...Array.from({ length: Math.max(m.links.length, m.fpds.length) }, (_, i) => { const l = m.links[i], p = m.fpds[i]; const c = p ? flow.calcs[p.id] : undefined, s = p ? flow.sched[p.id] : undefined;
       return [l?.parent ?? '', l?.child ?? '', l?.rule ?? '', l ? o(l.param) : '', l ? l.transferDays : '', l ? l.adjustTakts : '', '', p?.id ?? '', c?.ok ? c.ltUnit : '', c?.ok ? c.duration : '', s ? s.start : '', s ? s.end : '', c?.ok ? c.wip : '']; }),
     [], ['', '', '', '', '', '', '', 'Critical chain', flow.chain.join(' <- ')], ['', '', '', '', '', '', '', 'Programme end (days)', flow.endDay]], [12, 12, 16, 14, 14, 14, 3, 12, 18, 16, 12, 12, 18]);
-  S.Levers = sheet([...title('LEVER SETS'), ['Set', 'Name', 'Scope Factory', 'Load Change %', 'OEE Change (pts)', 'Machines Added', 'Shift Pattern'], ...m.levers.map((s) => [s.id, s.name, s.factory || 'All', s.loadPct, s.oeePts, s.machinesAdd, s.shift])], [10, 24, 14, 14, 16, 16, 16]);
+  S.Levers = sheet([...title('LEVER SETS'), ['Set', 'Name', 'Scope Factory', 'Load Change %', 'OEE Change (pts)', 'Machines Added', 'Shift Pattern'], ...m.levers.map((s) => [s.id, s.name, s.factory || 'All', s.loadPct, s.oeePts, s.machinesAdd, s.shift || 'Unchanged'])], [10, 24, 14, 14, 16, 16, 16]);
   S.Scenarios = sheet([...title('SCENARIO LOG'), ['Scenario', 'Factory', 'Cell', 'Asset', 'Load Change %', 'OEE Change (pts)', 'Machines Added', 'Shift Pattern', 'Note', 'Re-route (h)'], ...m.scenarios.map((s) => [s.name, s.factory, s.cell, s.asset, s.loadPct, s.oeePts, s.machinesAdd, s.shift, s.note, s.reroute])], [26, 10, 18, 20, 14, 16, 16, 16, 30]);
   S.Register = sheet([...title('RISKS, ASSUMPTIONS, OPPORTUNITIES & ACTIONS'), ['Ref', 'Type', 'Title', 'Owner', 'Time Impact', 'Cost Impact', 'Due Date', 'Status', 'Linked Cell/FPD', 'Probability (1-5)'], ...m.register.map((r) => [r.id, r.type, r.title, r.owner, o(r.timeImpact), o(r.costImpact), r.due, r.status, r.link, o(r.probability)])], [8, 12, 40, 22, 12, 12, 12, 12, 18]);
   const ar: unknown[][] = []; GATES.forEach((g) => THEMES.forEach((t, k) => ar.push([g, k + 1, t, m.assessor.ratings[`${g}|${k + 1}`] ?? '', ''])));

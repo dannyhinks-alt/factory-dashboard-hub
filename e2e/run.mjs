@@ -278,6 +278,20 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
   await page.getByTestId('mark-met-Launch').click();
   ok((await page.getByTestId('gate-status-Launch').innerText()).includes('PASSED'), 'Mark Gate Met passes the gate');
   ok((await page.getByTestId('selftest-drawer').getAttribute('open')) === null, 'self-test is collapsed by default');
+  // lever presets + log to scenario table (blank workbook starts with the three presets)
+  page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
+  { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Factory', 'Cell', 'Asset'], ['HT', 'C1', 'Oven']]), 'Data');
+    await page.getByTestId('xlsx-input').setInputFiles({ name: 'nolevers.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) }); }
+  await page.getByTestId('ws-4').click();
+  ok((await page.getByLabel('Set A name').inputValue()) === 'Set A — OEE & Method Uplift' && (await page.getByLabel('Set B shift').inputValue()) === '3 Shifts' && (await page.getByLabel('Set C machines added').inputValue()) === '1', 'Set A/B/C are pre-loaded with the presets');
+  page.once('dialog', (d) => d.accept()); await page.getByRole('button', { name: 'Load Demo Workbook' }).click(); await page.getByTestId('ws-4').click();
+  await page.getByLabel('Set A quick preset').selectOption('Stress Test (+20% Demand)');
+  ok((await page.getByLabel('Set A load change').inputValue()) === '20', 'quick preset fills the levers');
+  await page.getByLabel('Set A quick preset').selectOption('Reset to 0'); ok((await page.getByLabel('Set A load change').inputValue()) === '0', 'Reset to 0');
+  await page.getByLabel('Set A quick preset').selectOption('Quick Win (-10% Load, +5 OEE)'); ok((await page.getByLabel('Set A load change').inputValue()) === '-10' && (await page.getByLabel('Set A OEE change').inputValue()) === '5', 'Quick Win preset shows -10 / +5');
+  const before = await page.getByLabel('Scenario name').count();
+  await page.getByTestId('log-Set A').click();
+  ok((await page.getByLabel('Scenario name').count()) > before, 'Log to Scenario Table adds scenario lines');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }

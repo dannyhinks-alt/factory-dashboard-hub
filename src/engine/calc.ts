@@ -23,7 +23,7 @@ export type Band = 'GREEN' | 'AMBER' | 'RED' | 'NONE';
 export const band = (h: number | null): Band => (h === null ? 'NONE' : h >= GREEN_MIN ? 'GREEN' : h >= 0 ? 'AMBER' : 'RED');
 
 /** Typing 68 or 0.68 both mean 68%: values of 1 or less are fractions, larger values are percentages. */
-export const normalisePct = (n: number) => (n <= 1 ? n : n / 100);
+export const normalisePct = (n: number) => (Math.abs(n) <= 1 ? n : n / 100);
 export const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 export const pct = (v: number | null, d = 1) => (v === null ? '–' : `${(v * 100).toFixed(d)}%`);
 export const gbp = (v: number | null) => (v === null ? '–' : `£${Math.round(v).toLocaleString('en-GB')}`);

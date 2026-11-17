@@ -69,3 +69,18 @@ export const DICTIONARY: Record<string, string> = {
   'Low-Utilisation': 'Assets using less than the threshold of their effective capacity: candidates to release.',
   'Machines to add': 'Machines needed to bring an asset to its class limit.',
 };
+
+/** Practical starting points for the 3-Set Lever Tester, used whenever a set has no values yet. */
+export const LEVER_PRESETS = [
+  { id: 'Set A', name: 'Set A — OEE & Method Uplift', factory: '', loadPct: -0.1, oeePts: 0.05, machinesAdd: 0, shift: '' },
+  { id: 'Set B', name: 'Set B — 3-Shift Expansion', factory: '', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '3 Shifts' },
+  { id: 'Set C', name: 'Set C — CapEx + OEE Lift', factory: '', loadPct: 0, oeePts: 0.03, machinesAdd: 1, shift: '' },
+];
+/** Quick presets offered on each lever card (they change the levers only, not the name or scope). */
+export const QUICK_PRESETS: Record<string, { loadPct: number; oeePts: number; machinesAdd: number; shift: string }> = {
+  'Quick Win (-10% Load, +5 OEE)': { loadPct: -0.1, oeePts: 0.05, machinesAdd: 0, shift: '' },
+  'Shift Expansion (3 Shifts)': { loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '3 Shifts' },
+  'Add +1 Machine': { loadPct: 0, oeePts: 0, machinesAdd: 1, shift: '' },
+  'Stress Test (+20% Demand)': { loadPct: 0.2, oeePts: 0, machinesAdd: 0, shift: '' },
+  'Reset to 0': { loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '' },
+};
