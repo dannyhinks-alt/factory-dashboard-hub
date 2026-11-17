@@ -20,7 +20,7 @@ export function runSelfTest(m: Model): TestResult[] {
     for (const a of m.assets) { const c = calcAsset(m, a, 'model'); if (c.headroom === null) continue;
       const wk = weeksFor(m, a.factory)!, sh = shiftHoursFor(m, a.shift)!, lim = limitFor(m, a.complexity)!;
       const oee = m.settings.oeeMode === 'None' ? 1 : (m.settings.oeeMode === 'Passport' ? a.passportOee : a.oee) ?? 1;
-      const cap = lim * wk * sh * a.machines! * oee; const h = (cap - a.loadHrs! * stressMult(m)) / cap; e.push(rel(h, c.headroom)); n++; }
+      const sched = wk * sh * a.machines!; const cap = lim * Math.max(0.01 * sched, sched - (a.plannedLosses ?? 0)) * oee; const h = (cap - a.loadHrs! * stressMult(m)) / cap; e.push(rel(h, c.headroom)); n++; }
     out.push(mk(1, 'Headroom per asset (independent algebra)', e, n)); }
   // 2 bottleneck
   { const e: number[] = []; let n = 0;

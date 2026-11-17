@@ -11,8 +11,12 @@ export function emptyModel(sourceName = 'New workbook'): Model {
 }
 
 let n = 0;
-const A = (factory: string, cell: string, asset: string, complexity: string, shift: string, machines: number | null, oee: number | null, pOee: number | null, load: number | null, pLoad: number | null, cost: number | null, space: number | null, unc: number | null, va: number | null, enva: number | null): Asset =>
-  ({ id: `A${++n}`, factory, cell, asset, complexity, shift, machines, oee, passportOee: pOee, loadHrs: load, passportLoadHrs: pLoad, costPerMachine: cost, spacePerMachine: space, costUncPct: unc, vaPct: va, envaPct: enva, inspectionHrs: null, plannedLossPct: null });
+const A = (factory: string, cell: string, asset: string, complexity: string, shift: string, machines: number | null, oee: number | null, pOee: number | null, load: number | null, pLoad: number | null, cost: number | null, space: number | null, unc: number | null, va: number | null, enva: number | null): Asset => {
+  const hasP = pOee !== null || pLoad !== null;
+  return { id: `A${++n}`, factory, cell, asset, note: '', demand: null, complexity, shift, machines, oee: oee ?? pOee, plannedLosses: null, loadHrs: load,
+    modelShift: shift, modelOee: oee, modelPlannedLosses: null, modelLoad: load, passportShift: hasP ? shift : '', passportOee: pOee, passportPlannedLosses: null, passportLoadHrs: pLoad, passportUtilisation: null, operationQty: null,
+    costPerMachine: cost, spacePerMachine: space, costUncPct: unc, vaPct: va, envaPct: enva, inspectionHrs: null };
+};
 
 export function demoModel(): Model {
   n = 0; const m = emptyModel('Demo workbook');
@@ -28,7 +32,7 @@ export function demoModel(): Model {
     A('DPF', '04_DPF_WELDG', 'Leak Test Rig', 'Simple', '1 Shift', 1, 0.9, 0.9, 600, 580, 85000, 4, 0.1, 0.3, 0.4),
     A('DPF', '07_DPF_MACHN', 'CNC Mill 1', 'Precision', '3 Shifts', 3, 0.68, 0.7, 3300, 3200, 480000, 14, 0.3, 0.5, 0.2),
     A('DPF', '07_DPF_MACHN', 'CNC Lathe 1', 'Standard', '2 Shifts', 2, 0.75, 0.75, 3000, 2900, 260000, 10, 0.2, 0.55, 0.25),
-    A('DPF', '07_DPF_MACHN', 'CMM Inspection', 'Precision', '1 Shift', 1, null, 0.8, 500, null, null, 6, null, 0.1, 0.6),
+    A('DPF', '07_DPF_MACHN', 'CMM Inspection', 'Precision', '1 Shift', 1, null, 0.8, 400, null, null, 6, null, 0.1, 0.6),
   ];
   const fp: [string, string, string, number | null, number | null][] = [
     ['Forging blanks', '02_HTMF_UTAQW', '', 900, 300], ['Rough machining', '07_DPF_MACHN', '', 1200, 300], ['Heat treat stage 1', '02_HTMF_UTAQW', '', 750, 300],
@@ -36,9 +40,9 @@ export function demoModel(): Model {
     ['Weld sub-assembly B', '04_DPF_WELDG', '', 1200, 300], ['Final weld & test', '04_DPF_WELDG', '', 2600, 300], ['Inspection', '07_DPF_MACHN', '', 700, 300], ['Despatch pack', '04_DPF_WELDG', '', 900, 300],
   ];
   m.cellLines = [
-    { id: 'C1', factory: 'HT', cell: '02_HTMF_UTAQW', passport: true, version: 'P2', date: '2025-11-03', demandUnits: 300, inspectionHrs: 400, opsHrs: 9000, leanHrs: 6000, footprint: 60, allocatedSpace: 70 },
-    { id: 'C2', factory: 'DPF', cell: '04_DPF_WELDG', passport: true, version: 'P1', date: '', demandUnits: 300, inspectionHrs: 500, opsHrs: 4000, leanHrs: 3500, footprint: 40, allocatedSpace: null },
-    { id: 'C3', factory: 'DPF', cell: '07_DPF_MACHN', passport: false, version: '', date: '', demandUnits: null, inspectionHrs: null, opsHrs: null, leanHrs: null, footprint: null, allocatedSpace: null },
+    { id: 'C1', factory: 'HT', cell: '02_HTMF_UTAQW', note: '', vaHrs: null, envaHrs: null, nvaHrs: null, extraFootprint: null, passport: true, version: 'P2', date: '2025-11-03', demandUnits: 300, inspectionHrs: 400, opsHrs: 9000, leanHrs: 6000, footprint: 60, allocatedSpace: 70 },
+    { id: 'C2', factory: 'DPF', cell: '04_DPF_WELDG', note: '', vaHrs: null, envaHrs: null, nvaHrs: null, extraFootprint: null, passport: true, version: 'P1', date: '', demandUnits: 300, inspectionHrs: 500, opsHrs: 4000, leanHrs: 3500, footprint: 40, allocatedSpace: null },
+    { id: 'C3', factory: 'DPF', cell: '07_DPF_MACHN', note: '', vaHrs: null, envaHrs: null, nvaHrs: null, extraFootprint: null, passport: false, version: '', date: '', demandUnits: null, inspectionHrs: null, opsHrs: null, leanHrs: null, footprint: null, allocatedSpace: null },
   ];
   m.settings.lists.Factories = ['HT', 'DPF']; m.settings.lists.Cells = m.cellLines.map((c) => c.cell); m.settings.lists.Assets = m.assets.map((a) => a.asset);
   m.settings.costEntries = [{ id: 'K1', asset: 'Weld Robot 1', cost: 320000, unc: 0.2, raw: '320000' }];

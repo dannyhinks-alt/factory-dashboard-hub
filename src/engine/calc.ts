@@ -50,15 +50,15 @@ export function headroomOf(load: number, avail: number, oee: number, limit: numb
 
 export function calcAsset(m: Model, a: Asset, kind: CalcKind, lever?: Lever): AssetCalc {
   const weeks = weeksFor(m, a.factory);
-  const shift = lever?.shift ? lever.shift : a.shift;
+  const shift = lever?.shift ? lever.shift : kind === 'passport' ? a.passportShift || a.shift : a.shift;
   const shiftHrs = shiftHoursFor(m, shift);
   const baseMachines = num(a.machines);
   const machines = baseMachines === null ? null : baseMachines + (lever?.machinesAdd ?? 0);
   const limit = limitFor(m, a.complexity);
   let oee: number | null;
   let load: number | null;
-  if (kind === 'noOee') { oee = 1; load = num(a.loadHrs); }
-  else if (kind === 'restated') { oee = num(a.passportOee); load = num(a.loadHrs); }
+  if (kind === 'noOee') { oee = 1; load = num(a.modelLoad); }
+  else if (kind === 'restated') { oee = num(a.passportOee); load = num(a.modelLoad); }
   else if (kind === 'passport') { oee = num(a.passportOee); load = num(a.passportLoadHrs); }
   else {
     const mode = m.settings.oeeMode;
@@ -69,7 +69,9 @@ export function calcAsset(m: Model, a: Asset, kind: CalcKind, lever?: Lever): As
   if (kind === 'restated' && oee === null) oee = null;
   if (oee !== null && lever?.oeePts) oee = Math.min(1, Math.max(0.01, oee + lever.oeePts));
   if (load !== null) load = load * stressMult(m) * (1 + (lever?.loadPct ?? 0));
-  const avail = weeks !== null && shiftHrs !== null && machines !== null ? weeks * shiftHrs * machines : null;
+  const losses = (kind === 'passport' ? num(a.passportPlannedLosses) ?? num(a.plannedLosses) : num(a.plannedLosses)) ?? 0;
+  const sched = weeks !== null && shiftHrs !== null && machines !== null ? weeks * shiftHrs * machines : null;
+  const avail = sched === null ? null : Math.max(sched * 0.01, sched - losses); // planned losses reduce hours, capped at 99%
   const ok = avail !== null && avail > 0 && load !== null && oee !== null && oee > 0 && limit !== null && limit > 0;
   if (!ok) return { asset: a, kind, weeks, shiftHrs, machines, limit, oee, load, avail, effUtil: null, headroom: null, complete: false };
   const r = headroomOf(load!, avail!, oee!, limit!);
@@ -157,9 +159,15 @@ export function calendarHours(m: Model): CalRow[] {
 }
 
 export function timeSplit(m: Model, factory: string) {
-  let va = 0, enva = 0, nva = 0, tot = 0;
+  let va = 0, enva = 0, nva = 0, tot = 0; const used = new Set<string>();
+  for (const c of m.cellLines) {
+    if (factory !== 'All' && c.factory !== factory) continue;
+    if (c.vaHrs === null && c.envaHrs === null && c.nvaHrs === null) continue;
+    va += c.vaHrs ?? 0; enva += c.envaHrs ?? 0; nva += c.nvaHrs ?? 0; used.add(c.cell);
+  }
+  tot = va + enva + nva;
   for (const a of m.assets) {
-    if (factory !== 'All' && a.factory !== factory) continue;
+    if ((factory !== 'All' && a.factory !== factory) || used.has(a.cell)) continue;
     const l = num(a.loadHrs); if (l === null || a.vaPct === null || a.envaPct === null) continue;
     va += l * a.vaPct; enva += l * a.envaPct; nva += l * Math.max(0, 1 - a.vaPct - a.envaPct); tot += l;
   }

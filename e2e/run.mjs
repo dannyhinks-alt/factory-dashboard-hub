@@ -103,7 +103,7 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .xlsx' }).click()]);
   const p = 'e2e/out/export.xlsx'; await dl.saveAs(p);
   const wb = XLSX.read(readFileSync(p)); ok(['Dashboard', 'Compare', 'Data', 'Assessor', 'FPD', 'Lead time', 'Sensitivity', 'Levers', 'Scenarios', 'Register', 'Settings', 'Dictionary'].every((s) => wb.SheetNames.includes(s)), 'export has all 12 tabs');
-  const data = XLSX.utils.sheet_to_json(wb.Sheets.Data, { header: 1 }); ok(data.some((r) => r[2] === 'Temper Oven' && r[7] === 0.82), 'exported .xlsx carries the filled gap');
+  const data = XLSX.utils.sheet_to_json(wb.Sheets.Data, { header: 1 }); ok(data.some((r) => r[2] === 'Temper Oven' && r[12] === 0.82), 'exported .xlsx carries the filled gap');
   const [dd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .docx' }).click()]);
   await dd.saveAs('e2e/out/summary.docx'); ok(readFileSync('e2e/out/summary.docx').subarray(0, 2).toString() === 'PK', '.docx exported');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
@@ -133,6 +133,32 @@ console.log('5. Partial .xlsx ingestion, then re-import of the export');
   await page.waitForTimeout(300);
   ok(await page.getByLabel('Complexity of Furnace').count() === 0 || true, 're-import ok');
   await page.getByTestId('ws-2').click(); ok((await page.getByLabel('Complexity of Furnace').inputValue()) === 'Precision', 'round-trip keeps filled gap');
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await ctx.close();
+}
+
+console.log('6. Exact workbook layout: Passport-only asset row');
+{
+  const { ctx, page, errors } = await fresh();
+  const pad = (r) => [...r, ...Array(22 - r.length).fill('')];
+  const banner = ['FACTORY > CELL > ASSET', '', '', '', '', '', 'FACTORY MODEL', '', '', '', '', 'ASSET LINE: PASSPORT (OEE-adjusted)', ...Array(10).fill('')];
+  const head = ['Factory', 'Cell', 'Asset (blank on a cell line)', 'Note', 'Demand (units / yr), optional', 'Quantity', 'Complexity class', 'Model Shift', 'Model OEE %', 'Model Planned losses', 'Model Load', 'Utilisation', 'OEE %', 'Shift pattern', 'Planned losses (hrs/yr)', 'Actual load (hrs/yr)', 'Operation quantity', 'VA (hrs/yr)', 'ENVA (hrs/yr)', 'NVA (hrs/yr)', 'Inspection (hrs/yr)', 'Extra footprint'];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x'], [], banner, head, pad(['DPF', 'CELL_P', '', '', 300, '', '', '', '', '', '', '', '', '', '', '', '', 1200, 500, 300]), pad(['DPF', 'CELL_P', 'Press 1', '', '', 2, 'Standard', '', '', '', '', 0.6, 0.68, '2 Shifts', 0, 1909, 3])]), 'Data');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Label', 'Value'], ['Planned Weeks DPF', 46]]), 'Settings');
+  await page.getByTestId('xlsx-input').setInputFiles({ name: 'passport-only.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) });
+  await page.getByTestId('ws-2').click();
+  ok((await page.getByLabel('Machines of Press 1', { exact: true }).inputValue()) === '2' && (await page.getByLabel('Shift of Press 1', { exact: true }).inputValue()) === '2 Shifts' && (await page.getByLabel('OEE of Press 1', { exact: true }).inputValue()) === '68' && (await page.getByLabel('Planned losses of Press 1', { exact: true }).inputValue()) === '0' && (await page.getByLabel('Load of Press 1', { exact: true }).inputValue()) === '1909', 'Data shows Machines 2, 2 Shifts, OEE 68%, losses 0, load 1909');
+  for (const l of ['Machines of Press 1', 'OEE of Press 1', 'Planned losses of Press 1', 'Load of Press 1', 'Shift of Press 1']) ok(!((await page.getByLabel(l, { exact: true }).getAttribute('class')) ?? '').includes('inp-gap'), `no false gap on ${l}`);
+  await page.getByTestId('ws-1').click();
+  for (const src of ['Both', 'Passport', 'Model']) {
+    await page.locator('div[aria-label="Source"] button', { hasText: new RegExp(`^${src}$`) }).click();
+    ok(/%/.test(await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText()) && !(await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText()).includes('–\t'), `dashboard headroom computed with Source = ${src}`);
+  }
+  ok(await page.getByText('Time Split').first().isVisible() && (await page.locator('svg[aria-label="Time split"]').count()) === 1, 'VA/ENVA/NVA chart drawn from cell-line hours');
+  await page.getByTestId('ws-3').click();
+  ok((await page.locator('tbody tr', { hasText: 'CELL_P' }).first().innerText()).includes('NO PAIR'), 'Compare shows NO PAIR with Passport numbers');
+  ok((await page.getByTestId('gap-item').filter({ hasText: 'no factory-model load to pair with' }).count()) === 1, 'check 11 flagged');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }

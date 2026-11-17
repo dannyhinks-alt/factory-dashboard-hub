@@ -21,8 +21,8 @@ describe('engine', () => {
   it('each rule fires on a crafted bad model', () => {
     const b = demoModel();
     b.cellLines.push({ ...b.cellLines[0] }); b.cellLines[1].factory = 'XX'; b.cellLines[0].version = ''; b.cellLines[2].passport = true;
-    b.assets[0].cell = 'GHOST'; b.assets[1].factory = 'DPF'; b.assets[2].shift = ''; b.assets[3].inspectionHrs = 5; b.assets[4].passportLoadHrs = null; b.assets[4].passportOee = null; b.register.forEach((x) => { if (x.type === 'Action') x.link = ''; }); b.assets[4].plannedLossPct = 0.995; b.assets[5].machines = 0;
-    b.assets[6].complexity = 'Exotic'; b.assets[7].asset = b.assets[6].asset; b.assets[6].passportLoadHrs = null; b.assets[8].loadHrs = null; b.assets[8].costUncPct = 0.1;
+    b.assets[0].cell = 'GHOST'; b.assets[1].factory = 'DPF'; b.assets[2].shift = ''; b.assets[3].inspectionHrs = 5; b.assets[4].passportLoadHrs = null; b.assets[4].passportOee = null; b.register.forEach((x) => { if (x.type === 'Action') x.link = ''; }); b.assets[4].plannedLosses = 3830; b.assets[5].machines = 0;
+    b.assets[6].complexity = 'Exotic'; b.assets[7].asset = b.assets[6].asset; b.assets[6].passportLoadHrs = null; b.assets[8].loadHrs = null; b.assets[8].modelLoad = null; b.assets[8].costUncPct = 0.1;
     b.settings.defaultComplexity = 'Nope'; b.settings.stressTest = true; b.settings.costEntries.push({ id: 'Kx', asset: 'Ghost', cost: null, unc: 0.1, raw: 'abc' });
     b.settings.lists.Cells.push(''); b.cellLines[0].inspectionHrs = 99999; b.cellLines[0].footprint = 100; b.fpds[0].version = '';
     b.links.push({ id: 'Lx', parent: 'FPD-99', child: 'FPD-01', rule: 'Overlap %', param: null, transferDays: 0, adjustTakts: 0 });

@@ -4,26 +4,14 @@ import { calendarHours, cells, compareRows, costByFactory } from './calc';
 import { fpdCalc, solve } from './flow';
 import { pressureList } from './sensitivity';
 import { emptyModel } from './demo';
-import type { CellLine, Model, OeeMode, RegType, Rating, StartRule } from './types';
+import { dataSheetAoa, isoDate, parseDataSheet, toNum } from './importXlsx';
+import type { Model, OeeMode, RegType, Rating, StartRule } from './types';
 
 type Row = unknown[];
 const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]/g, '');
 const str = (v: unknown) => (v === null || v === undefined ? '' : String(v).trim());
-export function toNum(v: unknown): number | null {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  const s = str(v).replace(/[£,\s]/g, '');
-  if (!s) return null;
-  const pc = s.endsWith('%'); const n = Number(pc ? s.slice(0, -1) : s);
-  return Number.isFinite(n) ? (pc ? n / 100 : n) : null;
-}
 const frac = (v: unknown) => { const n = toNum(v); return n === null ? null : n > 1.5 ? n / 100 : n; };
 const yes = (v: unknown) => /^(y|yes|true|1|confirmed)$/i.test(str(v));
-export function isoDate(v: unknown): string {
-  if (typeof v === 'number' && v > 20000) return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);
-  const s = str(v); if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  const m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/); if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-  return '';
-}
 
 function rowsOf(wb: XLSX.WorkBook, name: string): Row[] {
   const real = wb.SheetNames.find((n) => n.trim().toLowerCase() === name.toLowerCase());
@@ -90,16 +78,9 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
   if (Object.keys(lists).length) m.settings.lists = { ...m.settings.lists, ...lists };
   // ---- Data
   let id = 0;
-  const data = table(rowsOf(wb, 'Data'), {
-    factory: ['factory'], cell: ['cell'], asset: ['asset'], complexity: ['complexityclass', 'complexity'], shift: ['shiftpattern', 'shift'], machines: ['machines', 'numberofmachines'],
-    oee: ['oee', 'modeloee'], pOee: ['passportoee'], load: ['annualload', 'loadhours', 'annualloadhours'], pLoad: ['passportload', 'passportloadhours'],
-    cost: ['costpermachine', 'cost'], space: ['spacepermachine', 'space'], unc: ['costuncertainty', 'uncertainty'], va: ['va'], enva: ['enva'], insp: ['inspection'], loss: ['plannedlosses', 'plannedloss'],
-  }, ['factory', 'asset']);
-  m.assets = data.map((r) => ({ id: `A${++id}`, factory: str(r.factory).toUpperCase(), cell: str(r.cell), asset: str(r.asset), complexity: str(r.complexity), shift: str(r.shift), machines: toNum(r.machines),
-    oee: frac(r.oee), passportOee: frac(r.pOee), loadHrs: toNum(r.load), passportLoadHrs: toNum(r.pLoad), costPerMachine: toNum(r.cost), spacePerMachine: toNum(r.space), costUncPct: frac(r.unc), vaPct: frac(r.va), envaPct: frac(r.enva), inspectionHrs: toNum(r.insp), plannedLossPct: frac(r.loss) }));
+  const dsr = parseDataSheet(rowsOf(wb, 'Data'));
+  m.assets = dsr.assets; m.cellLines = dsr.cellLines;
   m.assets.forEach((a) => { if (a.factory && m.settings.plannedWeeks[a.factory] === undefined) m.settings.plannedWeeks[a.factory] = null; });
-  m.cellLines = table(rowsOf(wb, 'Data'), { f: ['linefactory'], c: ['linecell'], p: ['passportcell'], v: ['passportversion'], d: ['passportdate'], dem: ['demand'], insp: ['cellinspection'], ops: ['celloperations'], lean: ['celllean'], fp: ['footprint'], sp: ['allocatedspace'] }, ['f', 'c'])
-    .filter((r) => str(r.c) || str(r.f)).map((r, i): CellLine => ({ id: `C${i + 1}`, factory: str(r.f).toUpperCase(), cell: str(r.c), passport: yes(r.p), version: str(r.v), date: isoDate(r.d), demandUnits: toNum(r.dem), inspectionHrs: toNum(r.insp), opsHrs: toNum(r.ops), leanHrs: toNum(r.lean), footprint: toNum(r.fp), allocatedSpace: toNum(r.sp) }));
   // ---- FPD
   m.fpds = table(rowsOf(wb, 'FPD'), { id: ['fpd', 'fpdid', 'fpdno'], name: ['name', 'description', 'fpdname'], cell: ['cell'], hours: ['hours', 'totalhours'], volume: ['volume', 'units'], whd: ['workinghoursperday', 'workinghday', 'whd'], ver: ['version'], date: ['date'] }, ['id', 'hours'])
     .filter((r) => str(r.id)).map((r) => ({ id: FPD_ID(r.id), name: str(r.name), cell: str(r.cell), hours: toNum(r.hours), volume: toNum(r.volume), whd: toNum(r.whd), version: str(r.ver), date: isoDate(r.date) }));
@@ -156,10 +137,7 @@ export function buildSheets(m: Model, uplift = 0): Record<string, XLSX.WorkSheet
   set[1].push('', 'Cost Asset', 'Cost Entry (£)', 'Cost Entry Uncertainty %');
   m.settings.costEntries.forEach((k, i) => { while (set.length < i + 3) set.push([]); const row = set[i + 2]; while (row.length < 2) row.push(''); row.push('', k.asset, k.raw !== '' && k.cost === null ? k.raw : o(k.cost), o(k.unc)); });
   S.Settings = sheet(set, [36, 40]);
-  S.Data = sheet([...title('DATA: FACTORY > CELL > ASSET'), ['Factory', 'Cell', 'Asset', 'Complexity Class', 'Shift Pattern', 'Machines', 'OEE %', 'Passport OEE %', 'Annual Load (h)', 'Passport Load (h)', 'Cost per Machine (£)', 'Space per Machine (m²)', 'Cost Uncertainty %', 'VA %', 'ENVA %', 'Inspection (h)', 'Planned Losses %', '', 'Line Factory', 'Line Cell', 'Passport Cell', 'Passport Version', 'Passport Date', 'Demand (units/yr)', 'Cell Inspection (h)', 'Cell Operations (h)', 'Cell Lean (h)', 'Footprint (m²)', 'Allocated Space (m²)'],
-    ...Array.from({ length: Math.max(m.assets.length, m.cellLines.length) }, (_, i) => { const a = m.assets[i], c = m.cellLines[i];
-      return [a?.factory ?? '', a?.cell ?? '', a?.asset ?? '', a?.complexity ?? '', a?.shift ?? '', a ? o(a.machines) : '', a ? o(a.oee) : '', a ? o(a.passportOee) : '', a ? o(a.loadHrs) : '', a ? o(a.passportLoadHrs) : '', a ? o(a.costPerMachine) : '', a ? o(a.spacePerMachine) : '', a ? o(a.costUncPct) : '', a ? o(a.vaPct) : '', a ? o(a.envaPct) : '', a ? o(a.inspectionHrs) : '', a ? o(a.plannedLossPct) : '', '',
-        c?.factory ?? '', c?.cell ?? '', c ? (c.passport ? 'YES' : 'NO') : '', c?.version ?? '', c?.date ?? '', c ? o(c.demandUnits) : '', c ? o(c.inspectionHrs) : '', c ? o(c.opsHrs) : '', c ? o(c.leanHrs) : '', c ? o(c.footprint) : '', c ? o(c.allocatedSpace) : '']; })], [10, 18, 22, 16, 16, 10, 9, 14, 14, 16, 18, 18, 18, 8, 8]);
+  S.Data = sheet(dataSheetAoa(m), [10, 18, 26, 22, 18, 10, 14, 12, 12, 16, 14, 12, 10, 14, 16, 16, 14, 12, 12, 12, 14, 14]);
   S.FPD = sheet([...title('FPD: FLOW PRODUCT DEFINITIONS'), ['FPD', 'Name', 'Cell', 'Hours', 'Volume', 'Working h/day', 'Version', 'Date'], ...m.fpds.map((p) => [p.id, p.name, p.cell, o(p.hours), o(p.volume), o(p.whd), p.version, p.date])], [10, 28, 18, 10, 10, 14]);
   const flow = solve(m, uplift);
   S['Lead time'] = sheet([...title('LEAD TIME & DEPENDENCIES'), ['Parent FPD', 'Child FPD', 'Start rule', 'N / Overlap %', 'Transfer days', 'Adjust in takts', '', 'Result FPD', 'Lead time (days/unit)', 'Duration (days)', 'Start (day)', 'End (day)', "WIP (Little's Law)"],

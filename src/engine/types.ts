@@ -10,26 +10,44 @@ export interface Asset {
   factory: string;
   cell: string;
   asset: string;
+  note: string;
+  demand: number | null; // optional per-asset override of the cell-line demand
   complexity: string;
+  /** Active values used by every calculation: Factory Model value, else the Passport value. */
   shift: string;
   machines: number | null;
   oee: number | null;
-  passportOee: number | null;
+  plannedLosses: number | null; // hrs/yr
   loadHrs: number | null;
+  /** Factory Model block as typed (blank = no factory-model pair). */
+  modelShift: string;
+  modelOee: number | null;
+  modelPlannedLosses: number | null;
+  modelLoad: number | null;
+  /** ASSET LINE: PASSPORT (OEE-adjusted) block as typed. */
+  passportShift: string;
+  passportOee: number | null;
+  passportPlannedLosses: number | null;
   passportLoadHrs: number | null;
+  passportUtilisation: number | null;
+  operationQty: number | null;
   costPerMachine: number | null;
   spacePerMachine: number | null;
   costUncPct: number | null;
   vaPct: number | null;
   envaPct: number | null;
   inspectionHrs: number | null; // must sit on the cell line, flagged if typed here
-  plannedLossPct: number | null;
 }
 
 export interface CellLine {
   id: string;
   factory: string;
   cell: string;
+  note: string;
+  vaHrs: number | null;
+  envaHrs: number | null;
+  nvaHrs: number | null;
+  extraFootprint: number | null;
   passport: boolean;
   version: string;
   date: string;
