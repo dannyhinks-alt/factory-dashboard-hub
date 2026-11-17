@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as XLSX from 'xlsx';
 import { DICTIONARY } from '../engine/constants';
 import { RULES, runChecks } from '../engine/checks';
-import { demoModel } from '../engine/demo';
+import { demoModel, emptyModel } from '../engine/demo';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
 import { importSummary } from '../engine/importXlsx';
@@ -24,14 +24,18 @@ import { PrintSummary } from './PrintSummary';
 
 const WS = ['Executive Dashboard', 'Factory Data & Settings', 'Model vs Passport', 'Flow View', 'Sensitivity & Levers', 'Gates, Register & Self-Test'];
 const SEV_COL: Record<Severity, string> = { ERROR: '#c0392b', WARN: '#c98a00', INFO: '#0b5cab' };
+const SESSION_KEY = 'factory-hub.session.v1';
+const DEFAULT_FILTERS: ScopeFilters = { factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' };
+const readSession = (): Model | null => { try { const t = localStorage.getItem(SESSION_KEY); return t ? deserialise(t) : null; } catch { return null; } };
+const writeSession = (m: Model | null) => { try { if (m) localStorage.setItem(SESSION_KEY, serialise(m)); else localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked or full: session simply is not cached */ } };
 type Save = { kind: 'none' | 'saving' | 'saved' | 'error'; at?: string; msg?: string };
 
 export function App() {
-  const [model, setModel] = useState<Model | null>(null);
+  const [model, setModel] = useState<Model | null>(readSession); // blank (null) unless a saved session exists: never demo data
   const wbRef = useRef<XLSX.WorkBook | null>(null);
   const [ws, setWs] = useState(1);
   const [focus, setFocus] = useState<FocusTarget | null>(null);
-  const [filters, setF] = useState<ScopeFilters>({ factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' });
+  const [filters, setF] = useState<ScopeFilters>(DEFAULT_FILTERS);
   const [dirty, setDirty] = useState(false);
   const [version, setVersion] = useState(0);
   const [handle, setHandle] = useState<FsHandle | null>(null);
@@ -51,7 +55,18 @@ export function App() {
   const dict = useMemo(() => ({ ...DICTIONARY, ...(model?.dictionary ?? {}) }), [model?.dictionary]);
   const help = useCallback((t: string) => dict[t] ?? DICTIONARY[t] ?? '', [dict]);
 
-  const load = useCallback((m: Model, wb: XLSX.WorkBook | null, warn: string[] = [], sum: ImportSummary | null = null) => { setSummary(sum); wbRef.current = wb; setModel(m); setNotes(warn); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1); setGapOpen(true); }, []);
+  /** Atomic replace: every piece of previous state (model, workbook, filters, links, cache) is discarded before the new model is installed. */
+  const load = useCallback((m: Model, wb: XLSX.WorkBook | null, warn: string[] = [], sum: ImportSummary | null = null) => {
+    setSummary(sum); writeSession(null); wbRef.current = wb; setHandle(null); setSave({ kind: 'none' }); setF(DEFAULT_FILTERS); setSevFilter('ALL'); setRuleFilter('');
+    setModel(structuredClone(m)); setNotes(warn); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1); setGapOpen(true); writeSession(m);
+  }, []);
+  const clearAll = () => {
+    if (!window.confirm('Clear ALL data? This wipes the loaded workbook, the saved session in this browser and any unsaved edits, and returns to a blank start. It cannot be undone.')) return;
+    writeSession(null); wbRef.current = null; setHandle(null); setSave({ kind: 'none' }); setF(DEFAULT_FILTERS); setSevFilter('ALL'); setRuleFilter('');
+    setModel(null); setSummary(null); setNotes([]); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1);
+  };
+  const loadDemo = () => { if (model && !window.confirm('Loading the demo workbook will REPLACE all data currently loaded. Continue?')) return; load(demoModel(), null); };
+  useEffect(() => { if (model) writeSession(model); }, [model]);
   const edit = useCallback((fn: (d: Model) => void) => { setModel((cur) => { if (!cur) return cur; const d = structuredClone(cur); fn(d); return d; }); setDirty(true); setVersion((v) => v + 1); }, []);
 
   const openXlsx = async (file: File) => {
@@ -92,11 +107,13 @@ export function App() {
       {!model && <span className="mr-auto" />}
       {model && <>
         <button className="btn" onClick={() => fileRef.current?.click()}>Open .xlsx</button>
+        <button className="btn" onClick={loadDemo}>Load Demo Workbook</button>
         <button className="btn" onClick={link}>Link Auto-Save (.json)</button>
         <span data-testid="save-pill" role="status" className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: pill.c }}>{pill.t}</span>
         <button className="btn" onClick={exportX}>Export .xlsx</button>
         <button className="btn" onClick={exportD}>Export .docx</button>
         <button className="btn" onClick={() => window.print()}>Print summary</button>
+        <button className="px-3 py-1.5 rounded border border-red-300 bg-red-700 text-white font-semibold hover:bg-red-800 text-[13px]" data-testid="clear-all" onClick={clearAll}>Clear All Data</button>
       </>}
     </header>
   );
@@ -112,11 +129,12 @@ export function App() {
           <p className="text-steel-500 mb-5">Drag and drop an <b>.xlsx</b> here, in any state, partial or complete. Every data gap is found immediately. Nothing leaves this computer.</p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button className="btn-p" onClick={() => fileRef.current?.click()}>Choose .xlsx workbook</button>
-            <button className="btn" onClick={() => load(demoModel(), null)}>Load Demo Workbook</button>
+            <button className="btn" onClick={() => load(emptyModel('Blank workbook'), null)}>Start with an empty workbook</button>
+            <button className="btn" onClick={loadDemo}>Load Demo Workbook</button>
             <button className="btn" onClick={() => jsonRef.current?.click()}>Resume from auto-save (.json)</button>
           </div>
           {err && <p role="alert" className="mt-4 text-bad font-semibold">{err}</p>}
-          <p className="text-xs text-steel-500 mt-6">Demo: factories HT and DPF, cells 02_HTMF_UTAQW, 04_DPF_WELDG, 07_DPF_MACHN and FPD-01 to FPD-10.</p>
+          <p className="text-xs text-steel-500 mt-6">The app starts blank. The demo workbook is optional and only loads when you click its button.</p>
         </div>
       </main></div>;
   }

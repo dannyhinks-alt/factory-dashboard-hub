@@ -66,3 +66,11 @@ describe('engine', () => {
     const mc = monteCarlo(m, 0.3, 200); expect(mc.p10).toBeLessThanOrEqual(mc.p50); expect(mc.p50).toBeLessThanOrEqual(mc.p90);
   });
 });
+
+describe('blank start', () => {
+  it('empty model has no factories data, cells, assets, FPDs or register items', () => {
+    const e = emptyModel();
+    expect([e.assets, e.cellLines, e.fpds, e.links, e.register, e.scenarios, e.assessor.cells].map((x) => x.length)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(Object.values(e.settings.plannedWeeks).every((v) => v === null)).toBe(true); expect(e.settings.costEntries).toEqual([]);
+  });
+});
