@@ -6,7 +6,7 @@
 import ExcelJS from 'exceljs/dist/exceljs.bare.min.js';
 import * as XLSX from 'xlsx';
 import { SHIFTS, GATES, THEMES } from './constants';
-import { normalisePct } from './calc';
+import { normalisePct, shiftHoursFor } from './calc';
 import { PLAIN } from './plainEnglish';
 import { issueFactories } from './overview';
 import { ratingKey } from './governance';
@@ -29,7 +29,7 @@ export const FPD_COLS = ['FPD ID', 'Severity', 'What Is Missing', 'Name', 'Route
 export const GATE_COLS = ['Cell ID', 'Theme No', 'Theme', ...GATES] as const;
 
 // ------------------------------------------------------------------ what each flagged rule makes the engineer fill
-const ASSET_FIELDS: Record<string, Col[]> = { DC07: ['Shift Pattern'], DC21: ['Complexity'], DC10: ['Actual Load (hrs/yr)'], DC11: ['Actual Load (hrs/yr)'], DC12: ['Actual Load (hrs/yr)', 'OEE (%)'], DC13: ['OEE (%)'], DC30: ['Planned Losses (hrs/yr)'], DC31: ['CapEx (£)'], DC32: ['CapEx (£)'] };
+const ASSET_FIELDS: Record<string, Col[]> = { DC21: ['Complexity'], DC10: ['Actual Load (hrs/yr)'], DC11: ['Actual Load (hrs/yr)'], DC12: ['Actual Load (hrs/yr)', 'OEE (%)'], DC13: ['OEE (%)'], DC30: ['Planned Losses (hrs/yr)'], DC31: ['CapEx (£)'], DC32: ['CapEx (£)'] };
 const CELL_FIELDS: Record<string, Col[]> = { DC05: ['Demand (units/yr)'], DC09: ['Passport Version', 'Passport Date'], DC29: ['Inspection (hrs)', 'VA (hrs)'], DC33: ['Footprint (m²)'], DC34: ['Footprint (m²)'] };
 
 interface Row { factory: string; cellId: string; cellName: string; asset: string; sev: Severity; missing: string[]; vals: Partial<Record<Col, string | number>>; amber: Set<Col> }
@@ -38,7 +38,8 @@ const headlines = (xs: Issue[]) => [...new Set(xs.map((i) => PLAIN[i.rule]?.head
 
 export function assetRow(m: Model, a: Asset, xs: Issue[]): Row {
   const amber = new Set<Col>(); xs.forEach((i) => ASSET_FIELDS[i.rule]?.forEach((c) => amber.add(c)));
-  if (!a.shift) amber.add('Shift Pattern'); if (a.machines === null) amber.add('Machines'); if (a.oee === null) amber.add('OEE (%)'); if (a.loadHrs === null) amber.add('Actual Load (hrs/yr)');
+  if (!a.shift.trim() || shiftHoursFor(m, a.shift) === null) amber.add('Shift Pattern'); // only blank, or not resolvable to scheduled hours
+  if (a.machines === null) amber.add('Machines'); if (a.oee === null) amber.add('OEE (%)'); if (a.loadHrs === null) amber.add('Actual Load (hrs/yr)');
   if (xs.some((i) => i.rule === 'DC20' || i.rule === 'DC21') && a.complexity) amber.add('Complexity');
   if ((a.machines !== null && a.machines <= 0) || xs.some((i) => i.rule === 'DC27' && /machines/.test(i.message))) amber.add('Machines');
   if (a.oee !== null && (a.oee <= 0 || a.oee > 1)) amber.add('OEE (%)'); if (a.loadHrs !== null && a.loadHrs <= 0) amber.add('Actual Load (hrs/yr)');
@@ -88,7 +89,8 @@ export async function buildGapWorkbook(m: Model, issues: Issue[], factory: strin
   const wb = new ExcelJS.Workbook(); wb.creator = 'Factory Dashboard & Flow Hub'; wb.created = new Date();
   // lists for dropdowns live on a hidden sheet so long lists never hit Excel's 255-character limit
   const lists = wb.addWorksheet('Lists', { state: 'hidden' });
-  const shifts = [...new Set<string>([...SHIFTS, ...Object.keys(m.settings.shiftHours)])], classes = Object.keys(m.settings.limits), ratings = ['Met', 'Partial', 'Not met'];
+  // dropdown lists: the valid shift names from the active Settings calendar (plus the standard names, which always resolve)
+  const shifts = [...new Set<string>([...SHIFTS, ...Object.keys(m.settings.shiftHours).filter((name) => shiftHoursFor(m, name) !== null)])], classes = Object.keys(m.settings.limits), ratings = ['Met', 'Partial', 'Not met'];
   [shifts, classes, ratings].forEach((arr, c) => arr.forEach((v, r) => { lists.getCell(r + 1, c + 1).value = v; }));
   const ref = (c: number, n: number) => `Lists!$${'ABC'[c]}$1:$${'ABC'[c]}$${Math.max(1, n)}`;
 

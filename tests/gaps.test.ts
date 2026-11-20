@@ -111,3 +111,29 @@ describe('false DC26 errors on blank Lead time template rows', () => {
     expect(runChecks(wbOf(F, [head, ['FPD-01', 'FPD-09', 'Complete', '', 1, '']])).perRule.DC26).toBeGreaterThan(0);
   });
 });
+
+describe('Shift Pattern highlighting and dropdown in Export Gaps', () => {
+  const argb = (c: ExcelJS.Cell) => (c.fill as ExcelJS.FillPattern)?.fgColor?.argb ?? '';
+  const col = (CELL_COLS as readonly string[]).indexOf('Shift Pattern') + 1;
+  async function shiftFills(m: ReturnType<typeof demoModel>) {
+    const wb = await load(await buildGapWorkbook(m, runChecks(m, '2026-01-01').issues, 'All', '2026-11-20')); const out: Record<string, string> = {};
+    wb.getWorksheet(SHEET_CELLS)!.eachRow((r, n) => { if (n > 1 && r.getCell(4).value) out[String(r.getCell(4).value)] = argb(r.getCell(col)); }); return out;
+  }
+  it('is amber only when blank or unresolvable; standard labels resolve even with an empty calendar', async () => {
+    const m = demoModel(); m.settings.shiftHours = {}; m.assets[0].shift = 'two shift'; m.assets[2].shift = ''; m.assets[3].shift = 'Mystery pattern'; m.assets[8].shift = 'Continuous 24/7';
+    // make every asset appear in the sheet so the shift cell can be inspected
+    const issues = m.assets.map((a) => ({ rule: 'DC27', severity: 'WARN' as const, message: `${a.asset}: x`, target: { ws: 2, kind: 'asset' as const, ref: a.id } }));
+    const wb = await load(await buildGapWorkbook(m, issues, 'All', '2026-11-20')); const fills: Record<string, string> = {};
+    wb.getWorksheet(SHEET_CELLS)!.eachRow((r, n) => { if (n > 1 && r.getCell(4).value) fills[String(r.getCell(4).value)] = argb(r.getCell(col)); });
+    expect(fills[m.assets[0].asset]).toBe('FFF8FAFC'); expect(fills[m.assets[8].asset]).toBe('FFF8FAFC'); expect(fills[m.assets[1].asset]).toBe('FFF8FAFC');
+    expect(fills[m.assets[2].asset]).toBe('FFFEF3C7'); expect(fills[m.assets[3].asset]).toBe('FFFEF3C7');
+  });
+  it('is not highlighted merely because a different rule flagged the asset (e.g. missing planned weeks)', async () => {
+    const m = demoModel(); m.settings.plannedWeeks.HT = null; const f = await shiftFills(m); expect(Object.values(f).every((v) => v !== 'FFFEF3C7')).toBe(true);
+  });
+  it('dropdown lists valid calendar shift names and leaves out unresolved custom ones', async () => {
+    const m = demoModel(); m.settings.shiftHours = { 'Early + Late': 72, 'Nights only': null, '2 Shifts': 78 };
+    const lists = XLSX.utils.sheet_to_json<unknown[]>(sheetWb(await buildGapWorkbook(m, runChecks(m, '2026-01-01').issues, 'All', 'x')).Sheets.Lists, { header: 1 }).flat();
+    expect(lists).toContain('Early + Late'); expect(lists).toContain('2 Shifts'); expect(lists).toContain('3 Shifts'); expect(lists).not.toContain('Nights only');
+  });
+});

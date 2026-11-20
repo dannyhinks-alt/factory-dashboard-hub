@@ -32,10 +32,30 @@ export const n1 = (v: number | null, d = 1) => (v === null || !Number.isFinite(v
 export function weeksFor(m: Model, factory: string): number | null {
   return num(m.settings.plannedWeeks[factory]);
 }
+const SHIFT_WORDS: Record<string, string> = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6' };
+/**
+ * The standard shift name a label means, or null for a custom label: case-insensitive and tolerant of "2 Shift", "2-Shift",
+ * "Two Shifts", "2 shifts + saturday", "Continuous", "24/7" and similar variants.
+ */
+export function canonicalShift(label: string): string | null {
+  const text = label.toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ').replace(/\s*\+\s*/g, ' + ').replace(/\s+/g, ' ').trim()
+    .replace(/\b(one|two|three|four|five|six)\b/g, (w) => SHIFT_WORDS[w]);
+  if (/^(continuous( 24 ?\/ ?7)?|24 ?\/ ?7|24 ?x ?7|24 hours?)$/.test(text)) return 'Continuous 24/7';
+  const match = text.match(/^(\d) ?(?:x )?shifts?(?: pattern)?( \+ sat(?:urday)?)?$/);
+  return match ? `${match[1]} Shift${match[1] === '1' ? '' : 's'}${match[2] ? ' + Sat' : ''}` : null;
+}
+/**
+ * Scheduled hours per week for a shift label. An explicit positive Settings calendar entry wins (matched exactly, then by
+ * standard-name variant); a standard shift the calendar omits or leaves blank falls back to the default hours (1 Shift 40,
+ * 2 Shifts 80, 3 Shifts 120 …); a custom label with no hours is unresolved (null).
+ */
 export function shiftHoursFor(m: Model, shift: string): number | null {
-  if (!shift) return null;
-  const v = m.settings.shiftHours[shift];
-  return num(v) ?? (shift in DEFAULT_SHIFT_HOURS && m.settings.shiftHours[shift] === undefined ? DEFAULT_SHIFT_HOURS[shift] : null);
+  if (!shift || !shift.trim()) return null;
+  const hours = m.settings.shiftHours; const positive = (v: unknown) => { const n = num(v); return n !== null && n > 0 ? n : null; };
+  const exact = positive(hours[shift]); if (exact !== null) return exact;
+  const canonical = canonicalShift(shift); if (canonical === null) return null;
+  for (const [name, v] of Object.entries(hours)) if (canonicalShift(name) === canonical && positive(v) !== null) return positive(v);
+  return DEFAULT_SHIFT_HOURS[canonical] ?? null;
 }
 export function limitFor(m: Model, clsIn: string): number | null {
   const cls = clsIn || m.settings.defaultComplexity;

@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { demoModel } from './fixtures/sample';
 import { RULES, runChecks } from '../src/engine/checks';
 import { PLAIN } from '../src/engine/plainEnglish';
-import { normalisePct, cells } from '../src/engine/calc';
+import { calcAsset, normalisePct, cells, shiftHoursFor } from '../src/engine/calc';
 import { executiveTakeaway, factoryOverview, fpdFactories, nextActions, readiness, scopeChecks, statusReason } from '../src/engine/overview';
 import { gateStatus, ratingKey } from '../src/engine/governance';
 import { impactMessage } from '../src/engine/toast';
@@ -70,4 +70,25 @@ describe('4-workspace UX logic', () => {
     expect(runChecks(c).issues.some((i) => i.rule === 'DC07' && /7 Shifts/.test(i.message))).toBe(true);
     c.settings.shiftHours['7 Shifts'] = 168; expect(runChecks(c).issues.some((i) => i.rule === 'DC07' && /7 Shifts/.test(i.message))).toBe(false);
   });
+});
+
+describe('standard shift labels resolve (no false DC07)', () => {
+  const base = () => { const c = demoModel(); c.settings.shiftHours = {}; return c; }; // a workbook that omits the shift calendar
+  it.each([['2 Shifts', 80], ['2 shifts', 80], ['2 Shift', 80], ['2-Shift', 80], ['Two Shifts', 80], ['  2   SHIFTS ', 80], ['1 Shift', 40], ['One Shift', 40], ['3 Shifts', 120], ['three shifts', 120], ['Continuous 24/7', 168], ['continuous', 168], ['24/7', 168], ['2 Shifts + Sat', 90], ['2 shifts + saturday', 90], ['3-Shifts+Sat', 130]])('%s → %s h/week by default', (label, hours) => {
+    expect(shiftHoursFor(base(), label)).toBe(hours);
+  });
+  it('an explicit calendar entry wins, including under a variant spelling', () => {
+    const c = base(); c.settings.shiftHours = { '2 Shifts': 76 }; expect(shiftHoursFor(c, '2 Shifts')).toBe(76); expect(shiftHoursFor(c, 'two shift')).toBe(76);
+    const d = base(); d.settings.shiftHours = { 'Two Shifts': 84 }; expect(shiftHoursFor(d, '2 Shifts')).toBe(84);
+  });
+  it('a blank or zero calendar entry for a standard shift falls back to its default; custom shifts stay unresolved', () => {
+    const c = base(); c.settings.shiftHours = { '2 Shifts': null, '3 Shifts': 0, 'Nights only': null }; expect(shiftHoursFor(c, '2 Shifts')).toBe(80); expect(shiftHoursFor(c, '3 Shifts')).toBe(120);
+    expect(shiftHoursFor(c, 'Nights only')).toBeNull(); expect(shiftHoursFor(c, 'Weekend special')).toBeNull(); expect(shiftHoursFor(c, '')).toBeNull(); expect(shiftHoursFor(c, '   ')).toBeNull();
+  });
+  it('DC07 no longer fires for standard labels, even with an empty calendar, but still fires for unknown ones', () => {
+    const c = base(); c.assets.forEach((a) => { a.shift = '2 shift'; a.modelShift = '2 shift'; }); expect(runChecks(c).issues.filter((i) => i.rule === 'DC07')).toEqual([]);
+    c.assets[0].shift = 'Mystery pattern'; expect(runChecks(c).issues.filter((i) => i.rule === 'DC07').length).toBe(1);
+    c.assets[0].shift = ''; expect(runChecks(c).issues.filter((i) => i.rule === 'DC07').length).toBe(1);
+  });
+  it('capacity uses the resolved hours', () => { const a = base(), b = demoModel(); a.assets[0].shift = 'three shifts'; b.assets[0].shift = '3 Shifts'; expect(calcAsset(a, a.assets[0], 'model').headroom).toBeCloseTo(calcAsset(b, b.assets[0], 'model').headroom!, 12); });
 });
