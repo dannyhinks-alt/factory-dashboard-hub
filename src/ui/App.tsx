@@ -17,8 +17,9 @@ import type { FocusTarget, Model, ScopeFilters, Severity } from '../engine/types
 import { UPLIFTS } from '../engine/constants';
 import { AppCtx } from '../store';
 import { buildDocx } from '../docxExport';
-import { deserialise, readCachedSession, download, fsSupported, pickSaveFile, serialise, writeHandle } from '../persist';
+import { deserialise, download, fsSupported, pickSaveFile, serialise, writeHandle } from '../persist';
 import type { FsHandle } from '../persist';
+import { currentPageWithData, pickBootState, readEmbeddedText, saveHtml, SELF_SAVE_TOAST, setEmbeddedText } from '../selfSave';
 import { Info, Seg } from './kit';
 import { WsDashboard } from './WsDashboard';
 import { WsData } from './WsData';
@@ -32,7 +33,15 @@ const WS = ['Overall Status', 'Data & Gap Filler', 'Product Flow (FPD)', 'Gates,
 const SEV_COL: Record<Severity, string> = { ERROR: '#c0392b', WARN: '#c98a00', INFO: '#0b5cab' };
 const SESSION_KEY = 'factory-hub.session.v1';
 const DEFAULT_FILTERS: ScopeFilters = { factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' };
-const readSession = (): Model | null => { try { const t = localStorage.getItem(SESSION_KEY); const m = readCachedSession(t); if (t && !m) localStorage.removeItem(SESSION_KEY); return m; } catch { return null; } }; // legacy, demo or unreadable caches are discarded on boot
+const ROOT_PLACEHOLDER = typeof document === 'undefined' ? '' : document.getElementById('root')?.innerHTML ?? ''; // the loading message, restored in saved copies
+/** Boot: embedded master state (fresh machine, or at least as new as the browser cache) → else a current browser cache → else blank. */
+const readSession = (): Model | null => {
+  try {
+    const cache = localStorage.getItem(SESSION_KEY); const boot = pickBootState(readEmbeddedText(), cache);
+    if (cache && boot.source !== 'cache') localStorage.removeItem(SESSION_KEY); // legacy, unreadable or older than the embedded data
+    return boot.model;
+  } catch { return null; }
+};
 const writeSession = (m: Model | null) => { try { if (m) localStorage.setItem(SESSION_KEY, serialise(m)); else localStorage.removeItem(SESSION_KEY); } catch { /* storage blocked or full: session simply is not cached */ } };
 type Save = { kind: 'none' | 'saving' | 'saved' | 'error'; at?: string; msg?: string };
 
@@ -77,7 +86,7 @@ export function App() {
   }, []);
   const clearAll = () => {
     if (!window.confirm('Clear / blank the workspace? This wipes the loaded workbook, the saved session in this browser and any unsaved edits, and returns to a blank start. It cannot be undone.')) return;
-    writeSession(null); wbRef.current = null; setHandle(null); setSave({ kind: 'none' }); setF(DEFAULT_FILTERS); setSevFilter('ALL'); setRuleFilter('');
+    writeSession(null); setEmbeddedText(null); wbRef.current = null; setHandle(null); setSave({ kind: 'none' }); setF(DEFAULT_FILTERS); setSevFilter('ALL'); setRuleFilter('');
     setModel(null); setSummary(null); setNotes([]); setErr(''); setDirty(false); setVersion(0); setFocus(null); setWs(1);
   };
   useEffect(() => { if (model) writeSession(model); }, [model]);
@@ -123,6 +132,13 @@ export function App() {
       const h = await pickSaveFile('factory-hub-autosave.json'); await writeHandle(h, serialise(model)); setHandle(h); setDirty(false); setSave({ kind: 'saved', at: new Date().toLocaleTimeString('en-GB') });
     } catch (e) { if ((e as Error).name !== 'AbortError') setSave({ kind: 'error', msg: (e as Error).message }); }
   };
+  const saveAppData = async () => {
+    if (!model) return;
+    try {
+      const saved = await saveHtml(currentPageWithData(model, ROOT_PLACEHOLDER), download);
+      if (saved) { setEmbeddedText(model); if (!handle) setDirty(false); toast(SELF_SAVE_TOAST, 'good'); }
+    } catch (e) { toast(`Could not save the .html: ${(e as Error).message}`, 'warn'); }
+  };
   const exportX = () => { if (!model) return; download(model.sourceName.replace(/\.xlsx$/i, '') + ' (updated).xlsx', exportWorkbook(model, wbRef.current, UPLIFTS[filters.uplift] ?? 0), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); if (!handle) setDirty(false); };
   const exportD = async () => { if (model && checks) download('Factory Dashboard Summary.docx', await buildDocx(model, filters, checks), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); };
 
@@ -148,6 +164,7 @@ export function App() {
         {model && <>
           <button className="btn" onClick={() => fileRef.current?.click()}>Open .xlsx</button>
           <button className="btn" onClick={link}>Link Auto-Save (.json)</button>
+          <button className="btn" data-testid="save-app-data" onClick={() => void saveAppData()}>Save App + Data (.html)</button>
           <span data-testid="save-pill" role="status" className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: pill.c }}>{pill.t}</span>
           <button className="btn" onClick={exportX}>Export .xlsx</button>
           <button className="btn" onClick={exportD}>Export .docx</button>

@@ -2,7 +2,7 @@
 import { chromium } from 'playwright-core';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -400,6 +400,43 @@ console.log('10. Export Gaps / Import Filled Gaps');
   await page.waitForFunction(() => /Imported filled gaps/.test(document.querySelector('[data-testid=toasts]')?.textContent ?? ''));
   ok((await page.getByTestId('source-name').innerText()) === 'Sample fixture', 'dropping a gaps workbook patches the project instead of replacing it');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : '')); await ctx.close();
+}
+
+console.log('11. Save App + Data (.html): the app file carries the data');
+{
+  const { ctx, page, errors } = await fresh();
+  await page.addInitScript(() => { window.__picker = null; window.__saved = ''; window.showSaveFilePicker = async (o) => { window.__picker = o; return { name: 'x.html', createWritable: async () => ({ write: async (t) => { window.__saved = t; }, close: async () => {} }) }; }; });
+  await page.reload(); await loadSample(page);
+  await page.getByTestId('programme-name').fill('Carried inside the file');
+  ok(await page.getByTestId('save-app-data').isVisible(), 'Save App + Data (.html) button in the top command bar');
+  await page.getByTestId('save-app-data').click(); await page.waitForFunction(() => window.__saved.length > 1000);
+  const opts = await page.evaluate(() => window.__picker); ok(opts.suggestedName === 'Factory_Dashboard_Hub_Master.html' && opts.id === 'factory-hub-self-save' && opts.types[0].description === 'Self-Contained HTML App' && opts.types[0].accept['text/html'][0] === '.html', 'file picker options as specified');
+  ok((await page.getByTestId('toasts').innerText()).includes('Saved self-contained app + master data (.html) — ready to move or share anywhere.'), 'confirmation toast');
+  const html = await page.evaluate(() => window.__saved);
+  const tag = html.match(/<script id="embedded-master-state" type="application\/json">([\s\S]*?)<\/script>/);
+  ok(tag && tag[1].length > 1000 && !/<\/script/i.test(tag[1]) && JSON.parse(tag[1]).model.programmeName === 'Carried inside the file', 'workspace embedded in the tag with "<" escaped');
+  ok(html.startsWith('<!doctype html>') && html.includes('Loading Factory Dashboard') && !html.includes('id="boot-error"') && (html.match(/<script>/g) ?? []).length >= 1, 'saved page is a complete app: doctype, loading placeholder, bundle');
+  writeFileSync('e2e/out/Factory_Dashboard_Hub_Master.html', html);
+  ok(errors.length === 0, 'zero console errors while saving'); await ctx.close();
+
+  // a different computer: fresh browser profile, only the single .html file
+  const b = await fresh(); const opened = b.page;
+  await opened.goto(pathToFileURL(path.resolve('e2e/out/Factory_Dashboard_Hub_Master.html')).href); await opened.getByTestId('gap-panel').waitFor();
+  ok((await opened.getByTestId('programme-name').inputValue()) === 'Carried inside the file' && (await opened.getByTestId('ws-2').count()) === 1, 'opening the saved .html on a fresh machine restores the whole workspace');
+  await opened.getByTestId('ws-2').click(); ok((await opened.getByLabel('Asset filter').locator('option').count()) > 5, 'assets came from the file');
+  // newer edits in the browser win over the embedded copy
+  await opened.getByTestId('programme-name').fill('Edited after opening'); await opened.reload(); await opened.getByTestId('gap-panel').waitFor();
+  ok((await opened.getByTestId('programme-name').inputValue()) === 'Edited after opening', 'a newer timestamped browser edit beats the embedded state');
+  // Clear / Blank Workspace clears the cache and the live embedded state
+  opened.once('dialog', (d) => d.accept()); await opened.getByTestId('clear-all').click();
+  ok(await opened.getByTestId('dropzone').isVisible() && (await opened.evaluate(() => localStorage.length)) === 0 && (await opened.evaluate(() => document.getElementById('embedded-master-state').textContent.trim())) === '{}', 'Clear / Blank Workspace empties localStorage and the embedded state');
+  ok(b.errors.length === 0, 'zero console errors on the fresh machine' + (b.errors.length ? ': ' + b.errors.join(' | ') : '')); await b.ctx.close();
+
+  // fallback download when showSaveFilePicker is unavailable
+  const c = await fresh(); await c.page.evaluate(() => { delete window.showSaveFilePicker; }); await loadSample(c.page);
+  const [dl] = await Promise.all([c.page.waitForEvent('download'), c.page.getByTestId('save-app-data').click()]);
+  ok(dl.suggestedFilename() === 'Factory_Dashboard_Hub_Master.html', 'a download fallback is used without showSaveFilePicker');
+  await c.ctx.close();
 }
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL E2E CHECKS PASSED'); process.exit(failed ? 1 : 0);

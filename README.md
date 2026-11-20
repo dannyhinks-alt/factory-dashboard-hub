@@ -14,6 +14,7 @@ Self-contained offline React + TypeScript application that ingests the **LEAN CE
 3. **Ingest & Fill Gaps:**
    - Drop your `.xlsx` workbook onto the upload panel  Nothing is pre-loaded: the app always starts blank..
    - Review the **Data Check Gap Summary** (`ERROR`, `WARN`, `INFO`) and click any flagged item to jump straight to that row with dropdowns, toggles, and hover `ⓘ` help popovers.
+   - Use **Save App + Data (`.html`)** to write the whole workspace into the app file itself (`<script id="embedded-master-state">`): that one `.html` then carries the app and all master data to any computer. On opening, embedded data is used on a fresh machine or when it is at least as new as the browser's cache; a newer browser edit wins.
    - Use **Link Auto-Save (`.json`)** for live network-drive backups, or export back to `.xlsx` / print pack when finished.
 
 ---

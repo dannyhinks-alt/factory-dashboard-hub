@@ -16,8 +16,8 @@ describe('dist-offline/index.html opens on file://', () => {
     const html = readFileSync(file, 'utf8');
     expect(html).not.toMatch(/<script[^>]*type=["']module["']/); expect(html).not.toMatch(/<(script|link)\b[^>]*crossorigin/i);
     const open = html.indexOf('<script>'); // the bundle; a tiny <script id="boot-guard"> error handler precedes it in <head>
-    expect(html.slice(0, open).match(/<script/g)?.length).toBe(1); expect(html.slice(0, open)).toContain('<script id="boot-guard">');
-    expect((html.match(/<\/script/gi) ?? []).length).toBe(2); // only the real closing tags: none inside the JavaScript
+    expect(html.slice(0, open).match(/<script/g)?.length).toBe(2); expect(html.slice(0, open)).toContain('<script id="boot-guard">'); expect(html.slice(0, open)).toContain('<script id="embedded-master-state" type="application/json">{}</script>');
+    expect((html.match(/<\/script/gi) ?? []).length).toBe(3); // only the real closing tags: none inside the JavaScript
     expect(html).toContain('If this screen stays blank, corporate browser policy may be blocking local file:// JavaScript');
     expect(html.slice(html.lastIndexOf('</script>'))).not.toMatch(/<script/);
     expect(html.indexOf('<div id="root">')).toBeGreaterThan(-1); expect(open).toBeGreaterThan(html.indexOf('<div id="root">'));
