@@ -1,6 +1,7 @@
 // Headless end-to-end test against the single-file offline build. Fails on any console error.
 import { chromium } from 'playwright-core';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -370,6 +371,35 @@ console.log('9. Overall Combined card, compact charts, dense Data table, tooltip
   await page.getByTestId('json-input').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacy)) }); await page.getByTestId('gap-panel').waitFor();
   for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click();
   ok(errors.length === 0, 'legacy JSON imports and every screen renders'); await ctx.close();
+}
+
+console.log('10. Export Gaps / Import Filled Gaps');
+{
+  const { ctx, page, errors } = await fresh();
+  await loadSample(page);
+  ok(await page.getByTestId('export-gaps').isVisible() && await page.getByTestId('import-gaps').isVisible(), 'Export Gaps and Import Filled Gaps buttons in the Gap & Action Summary header');
+  const warn0 = Number((await page.getByTestId('sev-WARN').innerText()).split(' ')[0]);
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^DPF$/ }).click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-gaps').click()]);
+  ok(/^Factory_Data_Gaps_DPF_\d{4}-\d{2}-\d{2}\.xlsx$/.test(dl.suggestedFilename()), `file name follows the filter (${dl.suggestedFilename()})`);
+  await dl.saveAs('e2e/out/gaps.xlsx');
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile('e2e/out/gaps.xlsx');
+  ok(['Overview & Instructions', 'Cell & Asset Gaps', 'Product Flow (FPD) Gaps', 'Gate Readiness Gaps'].every((n) => wb.getWorksheet(n)), 'four tabs exported');
+  const ws = wb.getWorksheet('Cell & Asset Gaps'); let filled = 0;
+  ws.eachRow((r, n) => { if (n > 1 && r.getCell(2).value === '04_DPF_WELDG' && !r.getCell(4).value) { r.getCell(20 + 1).value = '2026-01-10'; filled++; } });
+  const fs = wb.getWorksheet('Product Flow (FPD) Gaps'); fs.eachRow((r, n) => { if (n > 1 && r.getCell(1).value === 'FPD-02') { r.getCell(6).value = 800; r.getCell(7).value = 100; } });
+  ok(filled === 1, 'the Weld cell line has an amber Passport Date to fill');
+  await wb.xlsx.writeFile('e2e/out/gaps-filled.xlsx');
+  await page.getByTestId('gaps-input').setInputFiles('e2e/out/gaps-filled.xlsx');
+  await page.waitForFunction(() => /Imported filled gaps/.test(document.querySelector('[data-testid=toasts]')?.textContent ?? ''), null, { timeout: 8000 });
+  const toast = await page.getByTestId('toasts').innerText(); ok(/field/.test(toast) && /ERROR \d+ → \d+, WARN \d+ → \d+/.test(toast), 'toast reports fields updated and ERROR/WARN movement: ' + toast.slice(0, 120));
+  await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
+  const warn1 = Number((await page.getByTestId('sev-WARN').innerText()).split(' ')[0]); ok(warn1 < warn0, `WARN flags resolved by the import (${warn0} → ${warn1})`);
+  // the same file dropped on the main upload path is recognised too
+  await page.getByTestId('xlsx-input').setInputFiles('e2e/out/gaps-filled.xlsx');
+  await page.waitForFunction(() => /Imported filled gaps/.test(document.querySelector('[data-testid=toasts]')?.textContent ?? ''));
+  ok((await page.getByTestId('source-name').innerText()) === 'Sample fixture', 'dropping a gaps workbook patches the project instead of replacing it');
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : '')); await ctx.close();
 }
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL E2E CHECKS PASSED'); process.exit(failed ? 1 : 0);

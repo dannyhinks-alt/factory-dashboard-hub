@@ -91,7 +91,7 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
   // ---- Links
   id = 0;
   m.links = table(rowsOf(wb, 'Lead time'), { parent: ['parentfpd', 'parent'], child: ['childfpd', 'child'], rule: ['startrule', 'rule'], param: ['n', 'value', 'param', 'noverlap', 'nunitsoverlap'], transfer: ['transferdays', 'transfer'], adjust: ['adjustintakts', 'adjust'] }, ['parent', 'child'])
-    .filter((r) => { const p = FPD_ID(r.parent), c = FPD_ID(r.child); const typed = str(r.rule) || toNum(r.param) !== null || toNum(r.transfer) || toNum(r.adjust); if (!p && !c) return false; if (/^x+$/i.test(p) || /^x+$/i.test(c)) return false; if (!typed && (p === c || skipped.has(p) || skipped.has(c))) return false; return true; })
+    .filter((r) => { const p = FPD_ID(r.parent), c = FPD_ID(r.child); const typed = str(r.rule) || toNum(r.param) !== null || toNum(r.transfer) || toNum(r.adjust); if (!p && !c) return false; if (/^x+$/i.test(p) || /^x+$/i.test(c)) return false; if (!typed && (p === c || skipped.has(p) || skipped.has(c) || !m.fpds.some((x) => x.id === p) || !m.fpds.some((x) => x.id === c))) return false; return true; })
     .map((r) => ({ id: `L${++id}`, parent: FPD_ID(r.parent), child: FPD_ID(r.child), rule: pickRule(r.rule), param: toNum(r.param), transferDays: toNum(r.transfer) ?? 0, adjustTakts: toNum(r.adjust) ?? 0 }));
   // ---- Levers
   const lv = table(rowsOf(wb, 'Levers'), { id: ['set'], name: ['name', 'description'], factory: ['scopefactory', 'factory'], load: ['loadchange', 'loadchangepct'], oee: ['oeechangepts', 'oeechange'], machines: ['machinesadded', 'machinesadd'], shift: ['shiftpattern', 'shift'] }, ['id', 'load']);

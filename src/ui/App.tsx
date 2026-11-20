@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 import { DICTIONARY } from '../engine/constants';
 import { RULES, runChecks } from '../engine/checks';
 import { factoriesOf, cells as calcCells } from '../engine/calc';
@@ -10,6 +10,8 @@ import { emptyModel } from '../engine/blank';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
 import { importSummary } from '../engine/importXlsx';
+import { applyFilledGaps, buildGapWorkbook, gapFileName, looksLikeGapWorkbook } from '../engine/gaps';
+import type { GapImportReport } from '../engine/gaps';
 import type { ImportSummary } from '../engine/importXlsx';
 import type { FocusTarget, Model, ScopeFilters, Severity } from '../engine/types';
 import { UPLIFTS } from '../engine/constants';
@@ -53,6 +55,7 @@ export function App() {
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
+  const gapRef = useRef<HTMLInputElement>(null);
   const asOf = useMemo(() => todayIso(), []);
 
   const allChecks = useMemo(() => (model ? runChecks(model, asOf) : null), [model, asOf]);
@@ -84,8 +87,22 @@ export function App() {
     if (!opts?.silent) { const r = impactMessage(cur, d, asOf); toast(r.msg, r.tone); }
   }, [asOf, toast]);
 
+  /** Non-destructive patch from a filled-in gaps workbook; reports the exact effect. */
+  const importGaps = (wb: XLSX.WorkBook) => {
+    const cur = modelRef.current; if (!cur) { setErr('Open your project first (or a .json auto-save), then import the filled gaps into it.'); return; }
+    const before = runChecks(cur, asOf).counts; let rep: GapImportReport | null = null;
+    edit((d) => { rep = applyFilledGaps(d, wb); }, { silent: true });
+    const r = rep as GapImportReport | null; if (!r || !r.sheets.length) { toast('No gap sheets found in that workbook', 'warn'); return; }
+    const after = runChecks(modelRef.current!, asOf).counts; const resolved = before.ERROR + before.WARN - after.ERROR - after.WARN;
+    toast(`Imported filled gaps: ${r.fieldsUpdated} field${r.fieldsUpdated === 1 ? '' : 's'} updated (${r.assetsPatched} asset, ${r.cellsPatched} cell, ${r.fpdsPatched} product family, ${r.ratingsSet} gate rating${r.ratingsSet === 1 ? '' : 's'}) · ERROR ${before.ERROR} → ${after.ERROR}, WARN ${before.WARN} → ${after.WARN}${resolved > 0 ? ` (${resolved} flag${resolved === 1 ? '' : 's'} resolved)` : ''}${r.unmatched.length ? ` · ${r.unmatched.length} row${r.unmatched.length === 1 ? '' : 's'} not matched and skipped` : ''}`, r.unmatched.length || !r.fieldsUpdated ? 'warn' : 'good');
+  };
+  const exportGaps = async () => {
+    if (!model || !checks) return;
+    download(gapFileName(filters.factory, new Date().toISOString().slice(0, 10)), await buildGapWorkbook(model, checks.issues, filters.factory, new Date().toISOString().slice(0, 10)), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    toast(`Exported ${checks.issues.length} flag${checks.issues.length === 1 ? '' : 's'} for ${filters.factory === 'All' ? 'all factories' : filters.factory}: fill the amber boxes, then use Import Filled Gaps`, 'info');
+  };
   const openXlsx = async (file: File) => {
-    try { const r = readWorkbook(await file.arrayBuffer(), file.name); load(r.model, r.wb, r.warnings, importSummary(r.model)); }
+    try { const buf = await file.arrayBuffer(); const wb0 = XLSX.read(buf, { type: 'array' }); if (looksLikeGapWorkbook(wb0)) { importGaps(wb0); return; } const r = readWorkbook(buf, file.name); load(r.model, r.wb, r.warnings, importSummary(r.model)); }
     catch (e) { setErr(`Could not read "${file.name}" as an .xlsx workbook: ${(e as Error).message}`); }
   };
   const openJson = async (file: File) => { try { load(deserialise(await file.text()), null, ['Loaded from auto-save file.']); } catch (e) { setErr((e as Error).message); } };
@@ -148,6 +165,7 @@ export function App() {
     </div>
   );
   const hidden = <><input ref={fileRef} type="file" accept=".xlsx,.xlsm" hidden data-testid="xlsx-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openXlsx(f); e.target.value = ''; }} />
+    <input ref={gapRef} type="file" accept=".xlsx" hidden data-testid="gaps-input" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { importGaps(XLSX.read(await f.arrayBuffer(), { type: 'array' })); } catch (er) { setErr(`Could not read "${f.name}": ${(er as Error).message}`); } } e.target.value = ''; }} />
     <input ref={jsonRef} type="file" accept=".json" hidden data-testid="json-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void openJson(f); e.target.value = ''; }} /></>;
 
   if (!model || !ctx || !checks) {
@@ -181,7 +199,9 @@ export function App() {
               {(['ERROR', 'WARN', 'INFO'] as Severity[]).map((s) => <button key={s} onClick={() => setSevFilter(sevFilter === s ? 'ALL' : s)} aria-pressed={sevFilter === s} data-testid={`sev-${s}`} className="chip" style={{ background: SEV_COL[s], opacity: sevFilter === 'ALL' || sevFilter === s ? 1 : 0.4 }}>{checks.counts[s]} {s}</button>)}
               <span className="text-xs text-steel-500">34 rules checked · {checks.issues.length} flag(s)</span>
               {notes.map((n) => <span key={n} className="text-xs text-steel-500">· {n}</span>)}
-              <button className="btn ml-auto" onClick={() => setGapOpen(!gapOpen)}>{gapOpen ? 'Hide list' : 'Show list'}</button>
+              <button className="btn-p ml-auto" data-testid="export-gaps" disabled={!checks.issues.length} onClick={() => void exportGaps()}>Export Gaps (.xlsx)</button>
+              <button className="btn" data-testid="import-gaps" onClick={() => gapRef.current?.click()}>Import Filled Gaps (.xlsx)</button>
+              <button className="btn" onClick={() => setGapOpen(!gapOpen)}>{gapOpen ? 'Hide list' : 'Show list'}</button>
             </div>
             {gapOpen && <ul className="mt-2 max-h-44 overflow-auto divide-y divide-steel-100 border border-steel-200 rounded" data-testid="gap-list">
               {sorted.length === 0 && <li className="p-2 text-good font-semibold">No gaps found. All 34 Data Checks are clear.</li>}
