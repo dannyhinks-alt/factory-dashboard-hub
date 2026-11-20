@@ -462,5 +462,47 @@ console.log('12. Data source defined on every chart, card and row');
   await page.getByTestId('ws-3').click(); ok((await page.locator('[data-testid=source-badge]', { hasText: 'Product Flow (FPD)' }).count()) >= 7, 'flow cards all say Source: Product Flow (FPD)');
   ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : '')); await ctx.close();
 }
+
+console.log('13. Gap Auto-Fill & Review Wizard');
+{
+  const { ctx, page, errors } = await fresh();
+  const j = JSON.parse(readFileSync('e2e/sample-session.json', 'utf8')); const m = j.model;
+  m.settings.plannedWeeks.HT = null; m.assets[0].shift = ''; m.assets[0].modelShift = ''; m.assets[1].complexity = ''; m.assets[2].oee = null; m.assets[2].modelOee = null; m.assets[2].passportOee = null; m.assets[3].shift = ''; m.assets[3].modelShift = '';
+  await page.getByTestId('json-input').setInputFiles({ name: 'blanks.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(j)) }); await page.getByTestId('gap-panel').waitFor();
+  ok(await page.getByTestId('open-wizard-header').isVisible(), 'Auto-Fill Gaps Wizard button in the Gap & Action Summary header');
+  const err0 = Number((await page.getByTestId('sev-ERROR').innerText()).split(' ')[0]); ok(err0 > 0, `blank gaps raise ERROR flags (${err0})`);
+  await page.getByTestId('ws-2').click(); ok(await page.getByTestId('open-wizard-data').isVisible(), 'wizard button in the Data & Gap Filler toolbar');
+  await page.getByTestId('open-wizard-data').click();
+  const scan = await page.getByTestId('wizard-scan').innerText(); ok(/blank Planned Weeks\s*1/.test(scan) && /blank Shift Pattern\s*2/.test(scan) && /blank Complexity Class\s*1/.test(scan) && /blank OEE \(%\)\s*1/.test(scan), 'step 1 shows live blank counts');
+  await page.getByTestId('wizard-next').click();
+  ok((await page.getByTestId('autofill-wizard').getByLabel('Default planned weeks').inputValue()) === '48' && (await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').inputValue()) === '2 Shifts' && (await page.getByTestId('autofill-wizard').getByLabel('Default complexity class').inputValue()) === 'Standard' && (await page.getByTestId('autofill-wizard').getByLabel('Default baseline OEE').inputValue()) === '85', 'step 2 defaults: 48 weeks, 2 Shifts, Standard, 85%');
+  ok((await page.getByTestId('autofill-wizard').getByLabel('Fill Planned Weeks').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Shift Pattern').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Complexity Class').isChecked()) && !(await page.getByTestId('autofill-wizard').getByLabel('Fill Baseline OEE').isChecked()), 'baseline OEE is optional and off');
+  ok((await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').locator('option').allInnerTexts()).includes('Continuous 24/7'), 'shift dropdown lists valid shifts');
+  await page.getByTestId('wizard-next').click(); ok(/1 factory planned-weeks value → 48 weeks/.test(await page.getByTestId('wizard-plan').innerText()) && /0 OEE value/.test(await page.getByTestId('wizard-plan').innerText()), 'step 3 previews what will be applied');
+  await page.getByTestId('wizard-apply').click();
+  const toast = await page.getByTestId('toasts').innerText(); ok(/filled 4 fields/.test(toast) && /ERROR flags? cleared/.test(toast), 'toast summarises fields filled and ERROR flags cleared: ' + toast.slice(0, 110));
+  const err1 = Number((await page.getByTestId('sev-ERROR').innerText()).split(' ')[0]); ok(err1 < err0, `ERROR flags cleared immediately (${err0} → ${err1})`);
+  const badges = await page.getByTestId('assumed-badge').count(); ok(badges === 4, `every wizard-filled field shows ASSUMED (${badges})`);
+  const wrap = page.locator('[data-assumed]').first(); const st = await wrap.locator('select, input').first().evaluate((e) => { const c = getComputedStyle(e); return [c.borderTopStyle, c.borderTopWidth, c.backgroundColor, c.borderTopColor]; });
+  ok(st[0] === 'dashed' && parseFloat(st[1]) >= 1 && st[2] === 'rgb(255, 251, 235)' && st[3] === 'rgb(217, 119, 6)', 'dashed amber highlight (#d97706 border, #fffbeb fill): ' + st.join(' '));
+  ok((await wrap.getAttribute('title')).includes('Filled by Auto-Fill Wizard — verify or replace with actual data'), 'ASSUMED tooltip explains the provenance');
+  ok(/Show Assumed Only \(4\)/.test(await page.getByTestId('assumed-only').innerText()), 'Show Assumed Only (N) counter');
+  const allRows = await page.getByLabel(/^Machines of /).count(); await page.getByTestId('assumed-only').click(); const onlyRows = await page.getByLabel(/^Machines of /).count(); ok(onlyRows > 0 && onlyRows < allRows, `Show Assumed Only filters the table (${allRows} → ${onlyRows})`);
+  await page.getByTestId('assumed-only').click();
+  // manual edit transitions to user data
+  const shiftSel = page.locator('[data-assumed^="asset:"][data-assumed$=":shift"]').first().locator('select'); await shiftSel.selectOption('3 Shifts');
+  ok((await page.getByTestId('assumed-badge').count()) === badges - 1, 'a manual edit clears the Assumed flag');
+  await page.getByRole('button', { name: /^Verify / }).first().click(); ok((await page.getByTestId('assumed-badge').count()) === badges - 2, '✓ Verify clears the flag and keeps the value');
+  // persistence
+  await page.reload(); await page.getByTestId('gap-panel').waitFor(); await page.getByTestId('ws-2').click(); ok((await page.getByTestId('assumed-badge').count()) === badges - 2, 'assumed flags survive a reload');
+  // export gaps keeps them
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-gaps').click()]); await dl.saveAs('e2e/out/assumed-gaps.xlsx');
+  const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile('e2e/out/assumed-gaps.xlsx'); let hit = 0; wb.getWorksheet('Cell & Asset Gaps').eachRow((r, n) => { if (n > 1 && String(r.getCell(6).value).includes('Wizard assumption — please verify')) hit++; }); ok(hit >= 1, `Export Gaps flags wizard assumptions (${hit} row${hit === 1 ? '' : 's'})`);
+  // revert
+  page.once('dialog', (d) => d.accept()); await page.getByTestId('revert-assumed').click();
+  ok((await page.getByTestId('assumed-badge').count()) === 0 && /Show Assumed Only \(0\)/.test(await page.getByTestId('assumed-only').innerText()), 'Revert Unverified Defaults clears every remaining assumption');
+  ok((await page.getByLabel('Planned Weeks of HT').inputValue()) === '', 'reverted fields are blank again (planned weeks of HT)');
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : '')); await ctx.close();
+}
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL E2E CHECKS PASSED'); process.exit(failed ? 1 : 0);

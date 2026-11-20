@@ -145,6 +145,8 @@ export interface Model {
   programmeName: string;
   contextBrief: string;
   factoryRoles: Record<string, string>;
+  /** Provenance of wizard-filled values: key ("factory:HT:plannedWeeks", "asset:A1:shift" …) → assumption label. A key means "Assumed Default"; no key means user or workbook data. */
+  assumedFields: Record<string, string>;
   assets: Asset[];
   cellLines: CellLine[];
   fpds: Fpd[];

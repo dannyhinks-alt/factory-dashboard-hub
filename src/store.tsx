@@ -15,6 +15,7 @@ export interface Ctx {
   status: { verdict: 'GOOD' | 'WATCH' | 'BAD'; reason: string; basis: string };
   ready: { pct: number; errors: number; clear: number };
   toast: (msg: string, tone?: 'good' | 'warn' | 'info') => void;
+  openWizard: () => void;
 }
 export const AppCtx = createContext<Ctx>(null as never);
 export const useApp = () => useContext(AppCtx);

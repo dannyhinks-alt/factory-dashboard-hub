@@ -59,6 +59,18 @@ export function Seg<T extends string | number>({ value, options, onChange, label
 
 export const Field = ({ label, term, children }: { label: string; term?: string; children: ReactNode }) => <label className="flex flex-col gap-0.5 text-[12px] text-steel-700"><Label term={term}>{label}</Label>{children}</label>;
 
+/**
+ * Wraps a control whose value was filled by the Auto-Fill Wizard (a key in assumedFields): dashed amber highlight, an ASSUMED
+ * badge explaining the provenance, and a quick Verify action that clears the assumption once the value has been checked.
+ */
+export function Assumed({ k, label, children }: { k: string; label: string; children: ReactNode }) {
+  const { model, edit } = useApp(); const why = model.assumedFields?.[k];
+  if (!why) return <>{children}</>;
+  return <div className="assumed" data-assumed={k} title={`${why}. Filled by Auto-Fill Wizard — verify or replace with actual data`}>{children}
+    <div className="flex items-center gap-1 text-[10px] leading-[14px] whitespace-nowrap"><span className="font-bold text-amber-700" data-testid="assumed-badge" title="Filled by Auto-Fill Wizard — verify or replace with actual data">ASSUMED</span>
+      <button type="button" className="text-emerald-700 font-semibold hover:underline" aria-label={`Verify ${label}`} onClick={() => edit((d) => { delete d.assumedFields[k]; }, { silent: true })}>✓ Verify</button></div></div>;
+}
+
 /** Row that flashes and scrolls into view when it is the current focus target. */
 export function useFocusRow(match: boolean) {
   const ref = useRef<HTMLTableRowElement>(null);

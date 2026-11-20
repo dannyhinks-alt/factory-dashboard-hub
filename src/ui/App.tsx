@@ -6,6 +6,8 @@ import { factoriesOf, cells as calcCells } from '../engine/calc';
 import { readiness, scopeChecks, statusBasis, statusReason } from '../engine/overview';
 import { verdictOf } from '../engine/story';
 import { impactMessage } from '../engine/toast';
+import { pruneAssumed } from '../engine/assumed';
+import { AutoFillWizard } from './AutoFillWizard';
 import { emptyModel } from '../engine/blank';
 import { todayIso } from '../engine/governance';
 import { exportWorkbook, readWorkbook } from '../engine/xlsx';
@@ -65,6 +67,7 @@ export function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
   const gapRef = useRef<HTMLInputElement>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const asOf = useMemo(() => todayIso(), []);
 
   const allChecks = useMemo(() => (model ? runChecks(model, asOf) : null), [model, asOf]);
@@ -91,7 +94,7 @@ export function App() {
   };
   useEffect(() => { if (model) writeSession(model); }, [model]);
   const edit = useCallback((fn: (d: Model) => void, opts?: { silent?: boolean }) => {
-    const cur = modelRef.current; if (!cur) return; const d = structuredClone(cur); fn(d); modelRef.current = d;
+    const cur = modelRef.current; if (!cur) return; const d = structuredClone(cur); fn(d); pruneAssumed(cur, d); modelRef.current = d; // a changed value is no longer an assumption
     setModel(d); setDirty(true); setVersion((v) => v + 1);
     if (!opts?.silent) { const r = impactMessage(cur, d, asOf); toast(r.msg, r.tone); }
   }, [asOf, toast]);
@@ -146,7 +149,7 @@ export function App() {
   const scopeCells = useMemo(() => (model ? calcCells(model, 'model').filter((c) => filters.factory === 'All' || c.factory === filters.factory) : []), [model, filters.factory]);
   const status = useMemo(() => { const v = verdictOf(scopeCells, checks?.counts.ERROR ?? 0); return { verdict: v, reason: statusReason(v, scopeCells, checks?.counts.ERROR ?? 0, filters.factory), basis: model ? statusBasis(model, filters.factory) : '' }; }, [model, scopeCells, checks, filters.factory]);
   const ready = useMemo(() => (checks ? readiness(checks) : { pct: 0, errors: 0, clear: 0 }), [checks]);
-  const ctx = useMemo(() => model && checks ? { model, edit, checks, filters, setFilters: (p: Partial<ScopeFilters>) => setF((f) => ({ ...f, ...p })), focus, goTo, help, asOf, status, ready, toast } : null, [model, edit, checks, filters, focus, goTo, help, asOf, status, ready, toast]);
+  const ctx = useMemo(() => model && checks ? { model, edit, checks, filters, setFilters: (p: Partial<ScopeFilters>) => setF((f) => ({ ...f, ...p })), focus, goTo, help, asOf, status, ready, toast, openWizard: () => setWizardOpen(true) } : null, [model, edit, checks, filters, focus, goTo, help, asOf, status, ready, toast]);
 
   const pill = !handle ? (dirty ? { t: 'Unsaved changes · not linked', c: '#c98a00' } : { t: 'No auto-save linked', c: '#5d6b79' })
     : save.kind === 'saving' || dirty ? { t: save.kind === 'saving' ? 'Saving…' : 'Unsaved changes', c: '#c98a00' } : save.kind === 'error' ? { t: `Save failed: ${save.msg}`, c: '#c0392b' } : { t: `Saved ${save.at ?? ''}`, c: '#1f8a4c' };
@@ -216,7 +219,8 @@ export function App() {
               {(['ERROR', 'WARN', 'INFO'] as Severity[]).map((s) => <button key={s} onClick={() => setSevFilter(sevFilter === s ? 'ALL' : s)} aria-pressed={sevFilter === s} data-testid={`sev-${s}`} className="chip" style={{ background: SEV_COL[s], opacity: sevFilter === 'ALL' || sevFilter === s ? 1 : 0.4 }}>{checks.counts[s]} {s}</button>)}
               <span className="text-xs text-steel-500">34 rules checked · {checks.issues.length} flag(s)</span>
               {notes.map((n) => <span key={n} className="text-xs text-steel-500">· {n}</span>)}
-              <button className="btn-p ml-auto" data-testid="export-gaps" disabled={!checks.issues.length} onClick={() => void exportGaps()}>Export Gaps (.xlsx)</button>
+              <button className="btn-p ml-auto" data-testid="open-wizard-header" onClick={() => setWizardOpen(true)}>Auto-Fill Gaps Wizard</button>
+              <button className="btn-p" data-testid="export-gaps" disabled={!checks.issues.length} onClick={() => void exportGaps()}>Export Gaps (.xlsx)</button>
               <button className="btn" data-testid="import-gaps" onClick={() => gapRef.current?.click()}>Import Filled Gaps (.xlsx)</button>
               <button className="btn" onClick={() => setGapOpen(!gapOpen)}>{gapOpen ? 'Hide list' : 'Show list'}</button>
             </div>
@@ -245,6 +249,7 @@ export function App() {
         </main>
         <div aria-live="polite" className="no-print fixed bottom-4 right-4 z-50 flex flex-col gap-2" data-testid="toasts">
           {toasts.map((t) => <div key={t.id} role="status" className="rounded shadow-lg px-4 py-2 text-white text-[13px] max-w-sm" style={{ background: t.tone === 'good' ? '#047857' : t.tone === 'warn' ? '#B45309' : '#1E293B' }}>{t.msg}</div>)}</div>
+        {wizardOpen && <AutoFillWizard onClose={() => setWizardOpen(false)} />}
         <PrintSummary />
       </div>
     </AppCtx.Provider>

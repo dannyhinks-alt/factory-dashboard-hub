@@ -3,7 +3,7 @@ import type { Model } from './types';
 
 export function emptyModel(sourceName = 'New workbook'): Model {
   return {
-    programmeName: '', contextBrief: '', factoryRoles: {},
+    programmeName: '', contextBrief: '', factoryRoles: {}, assumedFields: {},
     assets: [], cellLines: [], fpds: [], links: [], levers: LEVER_PRESETS.map((p) => ({ ...p })), scenarios: [], register: [],
     settings: { plannedWeeks: {}, oeeMode: 'Model', stressTest: false, stressPct: 0.1, limits: { ...DEFAULT_LIMITS }, shiftHours: { ...DEFAULT_SHIFT_HOURS }, defaultWhd: null, lowUtilThreshold: 0.4,
       confirmed: Object.fromEntries(PLACEHOLDERS.map((p) => [p, false])), lists: structuredClone(DEFAULT_LISTS), defaultComplexity: 'Standard', costEntries: [] },

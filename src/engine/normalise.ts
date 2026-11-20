@@ -20,7 +20,7 @@ export function normaliseModel(raw: unknown): Model {
   const numOrNull = (x: unknown) => x === null || nul(x) !== null;
   const m: Model = {
     ...base,
-    programmeName: str(r.programmeName), contextBrief: str(r.contextBrief), factoryRoles: rec<string>(r.factoryRoles, {}, (x) => typeof x === 'string'),
+    programmeName: str(r.programmeName), contextBrief: str(r.contextBrief), factoryRoles: rec<string>(r.factoryRoles, {}, (x) => typeof x === 'string'), assumedFields: rec<string>(r.assumedFields, {}, (x) => typeof x === 'string'),
     sourceName: str(r.sourceName, 'Workbook'), dictionary: rec<string>(r.dictionary, {}, (x) => typeof x === 'string'),
     settings: {
       ...base.settings,

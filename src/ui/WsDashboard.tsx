@@ -2,7 +2,8 @@ import { calendarHours, cells, costByFactory, factoriesOf, gbp, n1, pct, timeSpl
 import { cellIsPassport, combinedOverview, executiveTakeaway, factoryOverview, nextActions } from '../engine/overview';
 import { fiveLines, scopedCells } from '../engine/story';
 import { useApp } from '../store';
-import { Card, BandChip, BasisPill, Empty, FocusRow, NumInput, Seg, Sel, SourceBadge, Th, Label, Field } from './kit';
+import { factoryKey } from '../engine/assumed';
+import { Assumed, Card, BandChip, BasisPill, Empty, FocusRow, NumInput, Seg, Sel, SourceBadge, Th, Label, Field } from './kit';
 import { DivergingBars, HBars, Ring, StackedH } from './charts';
 
 const VCOL = { GOOD: '#059669', WATCH: '#D97706', BAD: '#E11D48' } as const;
@@ -97,7 +98,7 @@ export function WsDashboard() {
         <Field label="Chart Sort"><Sel label="Chart Sort" gap={false} blank="" value={filters.sort} options={['Worst first', 'Best first', 'Name']} onChange={(v) => setFilters({ sort: v as never })} /></Field>
         <Field label="Chart Show"><Seg label="Chart Show" value={filters.show} options={['Headroom', 'Utilisation'] as const} onChange={(v) => setFilters({ show: v })} /></Field>
         <div className="flex gap-3 items-end"><span className="text-xs font-semibold text-slate-700"><Label term="Planned Weeks">Planned Weeks</Label></span>
-          {Object.keys(model.settings.plannedWeeks).map((f) => <label key={f} className={`flex flex-col text-xs w-20 ${focus?.kind === 'factory' && focus.ref === f ? 'focus-flash' : ''}`}>{f}<NumInput label={`Planned Weeks ${f}`} value={model.settings.plannedWeeks[f]} min={1} onChange={(v) => edit((d) => { d.settings.plannedWeeks[f] = v; })} /></label>)}</div>
+          {Object.keys(model.settings.plannedWeeks).map((f) => <label key={f} className={`flex flex-col text-xs w-24 ${focus?.kind === 'factory' && focus.ref === f ? 'focus-flash' : ''}`}>{f}<Assumed k={factoryKey(f)} label={`planned weeks of ${f}`}><NumInput label={`Planned Weeks ${f}`} value={model.settings.plannedWeeks[f]} min={1} onChange={(v) => edit((d) => { d.settings.plannedWeeks[f] = v; })} /></Assumed></label>)}</div>
       </div></Card>
 
     <Card title="Cell Headroom Board" term="Headroom" source="Cell Passport (where linked) / Factory Model (Data sheet)" right={<span className="text-xs">GREEN ≥ 10% · AMBER 0–10% · RED &lt; 0%</span>}>

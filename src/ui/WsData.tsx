@@ -4,7 +4,8 @@ import { shiftHoursFor } from '../engine/calc';
 import { band, calcAsset, factoriesOf, pct } from '../engine/calc';
 import type { Asset, CellLine } from '../engine/types';
 import { useApp } from '../store';
-import { BandChip, Card, FocusRow, Field, Info, NumInput, Seg, Sel, Th, Toggle, Label } from './kit';
+import { Assumed, BandChip, Card, FocusRow, Field, Info, NumInput, Seg, Sel, Th, Toggle, Label } from './kit';
+import { assetKey, factoryKey, revertUnverified } from '../engine/assumed';
 
 function ListEditor({ name, items, onChange }: { name: string; items: string[]; onChange: (v: string[]) => void }) {
   const [t, setT] = useState('');
@@ -29,7 +30,10 @@ function DefineShift({ shift }: { shift: string }) {
 }
 
 export function WsData() {
-  const { model, edit, focus, filters } = useApp();
+  const { model, edit, focus, filters, openWizard, toast } = useApp();
+  const [assumedOnly, setAssumedOnly] = useState(false);
+  const assumedN = Object.keys(model.assumedFields).length;
+  const hasAssumed = (assetId: string) => Object.keys(model.assumedFields).some((k) => k.startsWith(`asset:${assetId}:`));
   const globalFac = filters.factory;
   const [facLocal, setFac] = useState('All');
   const fac = globalFac !== 'All' ? globalFac : facLocal; const [cell, setCell] = useState('All'); const [asset, setAsset] = useState('All');
@@ -42,10 +46,10 @@ export function WsData() {
     if (focus.kind === 'cell') { const [f, c] = focus.ref.split('|'); setFac(f); setCell(c); setAsset('All'); }
     if (focus.kind === 'list') { setFac('All'); setCell('All'); setAsset('All'); }
   }, [focus]); // eslint-disable-line
-  const rows = model.assets.filter((a) => (fac === 'All' || a.factory === fac) && (cell === 'All' || a.cell === cell) && (asset === 'All' || a.id === asset));
+  const rows = model.assets.filter((a) => (fac === 'All' || a.factory === fac) && (cell === 'All' || a.cell === cell) && (asset === 'All' || a.id === asset) && (!assumedOnly || hasAssumed(a.id)));
   const shiftOptions = [...new Set<string>([...SHIFTS, ...Object.keys(model.settings.shiftHours)])];
   const groups: { key: string; cell: string; line: CellLine | null; assets: Asset[] }[] = [];
-  model.cellLines.forEach((c) => { if ((fac !== 'All' && c.factory !== fac) || (cell !== 'All' && c.cell !== cell)) return; const as = rows.filter((x) => x.cell === c.cell); if (asset !== 'All' && !as.length) return; groups.push({ key: c.id, cell: c.cell, line: c, assets: as }); });
+  model.cellLines.forEach((c) => { if ((fac !== 'All' && c.factory !== fac) || (cell !== 'All' && c.cell !== cell)) return; const as = rows.filter((x) => x.cell === c.cell); if ((asset !== 'All' || assumedOnly) && !as.length) return; groups.push({ key: c.id, cell: c.cell, line: c, assets: as }); });
   [...new Set(rows.map((x) => x.cell))].filter((c) => !model.cellLines.some((l) => l.cell === c)).forEach((c) => groups.push({ key: `orphan:${c}`, cell: c, line: null, assets: rows.filter((x) => x.cell === c) }));
   const addCell = () => edit((d) => { d.cellLines.push({ id: `C${Date.now().toString(36)}`, factory: fac === 'All' ? '' : fac, cell: '', note: '', vaHrs: null, envaHrs: null, nvaHrs: null, extraFootprint: null, passport: false, version: '', date: '', demandUnits: null, inspectionHrs: null, opsHrs: null, leanHrs: null, footprint: null, allocatedSpace: null }); });
   const upd = (id: string, fn: (a: Asset) => void) => edit((d) => { const a = d.assets.find((x) => x.id === id); if (a) fn(a); });
@@ -56,7 +60,7 @@ export function WsData() {
 
   return <div className="grid gap-4">
     {!model.assets.length && !model.cellLines.length && <section className="card accent-watch p-4" data-testid="data-onboarding"><b>Nothing loaded yet. Two ways to start:</b><ol className="list-decimal ml-5 mt-1 space-y-1 text-slate-700"><li><b>Import:</b> use <i>Open .xlsx</i> in the top bar for your LEAN CELL DESIGN workbook, or open a saved <i>.json</i> auto-save from the start screen. Every gap is then listed and can be fixed here.</li><li><b>Type it in:</b> add a factory in <i>Central Lists</i> below, press <i>+ Add cell line</i>, then <i>+ Add asset</i> for each machine group.</li></ol></section>}
-    <Card title="Guided data & gap filler: cell summary lines with their assets beneath" source="Factory Model block + Cell Design Passport block (Data sheet)" right={<><button className="btn" onClick={addCell}>+ Add cell line</button><button className="btn-p" onClick={add}>+ Add asset</button></>}>
+    <Card title="Guided data & gap filler: cell summary lines with their assets beneath" source="Factory Model block + Cell Design Passport block (Data sheet)" right={<><button className="btn-p" data-testid="open-wizard-data" onClick={openWizard}>Auto-Fill Gaps Wizard</button><button className="btn" data-testid="assumed-only" aria-pressed={assumedOnly} onClick={() => setAssumedOnly(!assumedOnly)}>{assumedOnly ? '✓ ' : ''}Show Assumed Only ({assumedN})</button><button className="btn" data-testid="revert-assumed" disabled={!assumedN} onClick={() => { if (window.confirm(`Revert ${assumedN} unverified wizard default${assumedN === 1 ? '' : 's'} back to blank? Values you have verified or edited are kept.`)) { let n = 0; edit((d) => { n = revertUnverified(d); }, { silent: true }); toast(`Reverted ${n} unverified default${n === 1 ? '' : 's'} to blank`, 'info'); } }}>Revert Unverified Defaults</button><button className="btn" onClick={addCell}>+ Add cell line</button><button className="btn-p" onClick={add}>+ Add asset</button></>}>
       <div className="flex flex-wrap gap-3 mb-3">
         {globalFac === 'All' && <Field label="Factory" term="Factory"><Sel label="Factory filter" gap={false} blank="All factories" value={fac === 'All' ? '' : fac} options={factories} onChange={(v) => { setFac(v || 'All'); setCell('All'); setAsset('All'); }} /></Field>}
         <Field label="Cell"><Sel label="Cell filter" gap={false} blank="All cells" value={cell === 'All' ? '' : cell} options={cellsOf} onChange={(v) => { setCell(v || 'All'); setAsset('All'); }} /></Field>
@@ -87,10 +91,10 @@ export function WsData() {
           <td className="td w-20"><Sel label={`Factory of ${a.asset}`} value={a.factory} options={factoriesOf(model)} onChange={(v) => upd(a.id, (x) => { x.factory = v; })} /></td>
           <td className="td min-w-[160px]"><input aria-label={`Cell of ${a.asset}`} list="cells-dl" className={`inp ${a.cell ? '' : 'inp-gap'}`} value={a.cell} onChange={(e) => upd(a.id, (x) => { x.cell = e.target.value; })} /></td>
           <td className="td min-w-[180px]"><input aria-label="Asset name" className={`inp ${a.asset ? '' : 'inp-gap'}`} value={a.asset} onChange={(e) => upd(a.id, (x) => { x.asset = e.target.value; })} /></td>
-          <td className="td min-w-[140px]"><Sel label={`Complexity of ${a.asset}`} value={a.complexity} options={COMPLEXITY} onChange={(v) => upd(a.id, (x) => { x.complexity = v; })} /></td>
-          <td className="td min-w-[135px]"><Sel label={`Shift of ${a.asset}`} value={a.shift} options={shiftOptions} onChange={(v) => upd(a.id, (x) => { x.shift = v; x.modelShift = v; })} /><DefineShift shift={a.shift} /></td>
+          <td className="td min-w-[140px]"><Assumed k={assetKey(a.id, 'complexity')} label={`complexity of ${a.asset}`}><Sel label={`Complexity of ${a.asset}`} value={a.complexity} options={COMPLEXITY} onChange={(v) => upd(a.id, (x) => { x.complexity = v; })} /></Assumed></td>
+          <td className="td min-w-[135px]"><Assumed k={assetKey(a.id, 'shift')} label={`shift of ${a.asset}`}><Sel label={`Shift of ${a.asset}`} value={a.shift} options={shiftOptions} onChange={(v) => upd(a.id, (x) => { x.shift = v; x.modelShift = v; })} /></Assumed><DefineShift shift={a.shift} /></td>
           {([['machines', 'Machines', false], ['oee', 'OEE', true], ['plannedLosses', 'Planned losses', false], ['loadHrs', 'Load', false]] as const).map(([k, l, p]) =>
-            <td key={k} className="td w-20"><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; if (k in MODEL_OF) (x as unknown as Record<string, number | null>)[MODEL_OF[k]] = v; })} /></td>)}
+            <td key={k} className="td w-20"><Assumed k={assetKey(a.id, 'oee')} label={`OEE of ${a.asset}`}><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; if (k in MODEL_OF) (x as unknown as Record<string, number | null>)[MODEL_OF[k]] = v; })} /></Assumed></td>)}
           <td className="td min-w-[135px] bg-slate-50"><Sel label={`Passport shift of ${a.asset}`} gap={false} value={a.passportShift} options={shiftOptions} onChange={(v) => upd(a.id, (x) => { x.passportShift = v; })} /><DefineShift shift={a.passportShift} /></td>
           {([['passportOee', 'Passport OEE', true], ['passportPlannedLosses', 'Passport planned losses', false], ['passportLoadHrs', 'Passport load', false], ['operationQty', 'Operation quantity', false]] as const).map(([k, l, p]) =>
             <td key={k} className="td w-20 bg-slate-50"><NumInput pct={p} gap={k === 'passportOee' || k === 'passportLoadHrs'} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
@@ -106,6 +110,7 @@ export function WsData() {
     <div className="grid lg:grid-cols-2 gap-4">
       <Card title="Calculation settings" source="Settings sheet">
         <div className="grid gap-3">
+          {Object.keys(S.plannedWeeks).length > 0 && <div><div className="font-semibold text-slate-700 mb-1"><Label term="Planned Weeks">Planned Weeks per factory</Label></div><div className="flex flex-wrap gap-3">{Object.keys(S.plannedWeeks).map((f) => <label key={f} className="flex flex-col text-xs w-24">{f}<Assumed k={factoryKey(f)} label={`planned weeks of ${f}`}><NumInput label={`Planned Weeks of ${f}`} min={1} value={S.plannedWeeks[f]} onChange={(v) => edit((d) => { d.settings.plannedWeeks[f] = v; })} /></Assumed></label>)}</div></div>}
           <div className="flex items-center gap-3"><Label term="OEE Mode">OEE Mode</Label><Seg label="OEE Mode" value={S.oeeMode} options={['Model', 'Passport', 'None'] as const} onChange={(v) => edit((d) => { d.settings.oeeMode = v; })} /></div>
           <div className="flex items-center gap-3"><Label term="Complexity Class">Default complexity class</Label><div className="w-40"><Sel label="Default complexity class" value={S.defaultComplexity} options={Object.keys(S.limits)} onChange={(v) => edit((d) => { d.settings.defaultComplexity = v; })} /></div></div>
           <div className={`flex items-center gap-3 ${flash('stress', 'setting')}`}><Label term="Capacity Stress Test">Apply Capacity Stress Test</Label><Toggle label="Apply Capacity Stress Test" on={S.stressTest} onChange={(v) => edit((d) => { d.settings.stressTest = v; })} onText="YES" offText="NO" />

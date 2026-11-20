@@ -36,15 +36,20 @@ interface Row { factory: string; cellId: string; cellName: string; asset: string
 const worst = (xs: Issue[]) => xs.reduce<Severity>((a, i) => (SEV_ORDER[i.severity] < SEV_ORDER[a] ? i.severity : a), 'INFO');
 const headlines = (xs: Issue[]) => [...new Set(xs.map((i) => PLAIN[i.rule]?.headline ?? i.message))];
 
+export const ASSUMPTION_NOTE = 'Wizard assumption — please verify';
+const ASSUMED_COLS: Record<string, Col> = { shift: 'Shift Pattern', complexity: 'Complexity', oee: 'OEE (%)' };
+/** Assumed (wizard-filled) fields of one asset: the Excel column and the label the engineer sees. */
+const assumedOf = (m: Model, a: Asset): { col: Col; label: string }[] => Object.entries(ASSUMED_COLS).flatMap(([kind, col]) => { const why = m.assumedFields?.[`asset:${a.id}:${kind}`]; return why ? [{ col, label: why }] : []; });
+
 export function assetRow(m: Model, a: Asset, xs: Issue[]): Row {
-  const amber = new Set<Col>(); xs.forEach((i) => ASSET_FIELDS[i.rule]?.forEach((c) => amber.add(c)));
+  const amber = new Set<Col>(); const assumed = assumedOf(m, a); assumed.forEach((x) => amber.add(x.col)); xs.forEach((i) => ASSET_FIELDS[i.rule]?.forEach((c) => amber.add(c)));
   if (!a.shift.trim() || shiftHoursFor(m, a.shift) === null) amber.add('Shift Pattern'); // only blank, or not resolvable to scheduled hours
   if (a.machines === null) amber.add('Machines'); if (a.oee === null) amber.add('OEE (%)'); if (a.loadHrs === null) amber.add('Actual Load (hrs/yr)');
   if (xs.some((i) => i.rule === 'DC20' || i.rule === 'DC21') && a.complexity) amber.add('Complexity');
   if ((a.machines !== null && a.machines <= 0) || xs.some((i) => i.rule === 'DC27' && /machines/.test(i.message))) amber.add('Machines');
   if (a.oee !== null && (a.oee <= 0 || a.oee > 1)) amber.add('OEE (%)'); if (a.loadHrs !== null && a.loadHrs <= 0) amber.add('Actual Load (hrs/yr)');
   const cl = m.cellLines.find((c) => c.cell === a.cell);
-  return { factory: a.factory, cellId: a.cell, cellName: cl?.note || '', asset: a.asset, sev: worst(xs), missing: headlines(xs), amber,
+  return { factory: a.factory, cellId: a.cell, cellName: cl?.note || '', asset: a.asset, sev: xs.length ? worst(xs) : 'WARN', missing: [...headlines(xs), ...assumed.map((x) => `${ASSUMPTION_NOTE}: ${x.col} (${x.label})`)], amber,
     vals: { 'Shift Pattern': a.shift, Complexity: a.complexity, Machines: a.machines ?? '', 'OEE (%)': a.oee === null ? '' : Math.round(a.oee * 10000) / 100, 'Actual Load (hrs/yr)': a.loadHrs ?? '', 'Planned Losses (hrs/yr)': a.plannedLosses ?? '', 'Demand (units/yr)': a.demand ?? '', 'CapEx (£)': a.costPerMachine ?? '', 'Footprint (m²)': a.spacePerMachine ?? '' } };
 }
 export function cellRow(c: CellLine, xs: Issue[]): Row {
@@ -59,7 +64,7 @@ export function cellAssetRows(m: Model, issues: Issue[]): Row[] {
   const by = new Map<string, Issue[]>(); issues.forEach((i) => { if (i.target && (i.target.kind === 'asset' || i.target.kind === 'cellline')) by.set(`${i.target.kind}:${i.target.ref}`, [...(by.get(`${i.target.kind}:${i.target.ref}`) ?? []), i]); });
   const rows: Row[] = [];
   m.cellLines.forEach((c) => { const xs = by.get(`cellline:${c.id}`); if (xs) rows.push(cellRow(c, xs)); });
-  m.assets.forEach((a) => { const xs = by.get(`asset:${a.id}`); if (xs) rows.push(assetRow(m, a, xs)); });
+  m.assets.forEach((a) => { const xs = by.get(`asset:${a.id}`); if (xs || assumedOf(m, a).length) rows.push(assetRow(m, a, xs ?? [])); });
   return rows.sort((a, b) => a.factory.localeCompare(b.factory) || a.cellId.localeCompare(b.cellId) || (a.asset === '' ? -1 : b.asset === '' ? 1 : a.asset.localeCompare(b.asset)));
 }
 
@@ -111,6 +116,8 @@ export async function buildGapWorkbook(m: Model, issues: Issue[], factory: strin
   const facs = [...new Set([...m.assets.map((a) => a.factory), ...m.cellLines.map((c) => c.factory), ...Object.keys(m.settings.plannedWeeks)].filter(Boolean))].filter((f) => factory === 'All' || f === factory);
   const tally = (f: string | null) => (['ERROR', 'WARN', 'INFO'] as Severity[]).map((s) => issues.filter((i) => { const fs = issueFactories(m, i); return i.severity === s && (f === null ? fs.length === 0 : fs.includes(f)); }).length);
   [...facs.map((f) => [f, ...tally(f)]), ['Programme-wide', ...tally(null)]].forEach((r, ri) => r.forEach((v, ci) => { const c = ov.getCell(15 + ri, ci + 1); c.value = v; c.border = { bottom: thin(BORDER) }; if (ci > 0) c.alignment = { horizontal: 'center' }; }));
+  const factoryAssumptions = Object.entries(m.assumedFields ?? {}).filter(([k]) => k.startsWith('factory:') && (factory === 'All' || k.split(':')[1] === factory));
+  factoryAssumptions.forEach(([k, why], i) => { const c = ov.getCell(20 + facs.length + i, 1); c.value = `${ASSUMPTION_NOTE}: Planned Weeks of ${k.split(':')[1]} (${why})`; c.fill = fillOf(AMBER); c.border = { top: thin(AMBER_BORDER), left: thin(AMBER_BORDER), bottom: thin(AMBER_BORDER), right: thin(AMBER_BORDER) }; });
   const totalRow = 15 + facs.length + 1; ov.getCell(totalRow, 1).value = 'Total'; ov.getCell(totalRow, 1).font = { bold: true };
   (['ERROR', 'WARN', 'INFO'] as Severity[]).forEach((s, i) => { const c = ov.getCell(totalRow, i + 2); c.value = issues.filter((x) => x.severity === s).length; c.font = { bold: true }; c.alignment = { horizontal: 'center' }; });
 
