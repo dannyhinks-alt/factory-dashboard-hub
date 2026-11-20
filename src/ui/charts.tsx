@@ -1,24 +1,24 @@
 import type { ReactNode } from 'react';
-import { BAND_COL } from './kit';
+import { BAND_COL, BasisPill } from './kit';
 import type { FlowResult } from '../engine/flow';
 import { axisUnit, wipAt } from '../engine/flow';
 import { band } from '../engine/calc';
 
 export const PALETTE = ['#0b5cab', '#c2410c', '#1f8a4c', '#7c3aed', '#b45309', '#0e7490', '#be185d', '#4d7c0f', '#475569', '#a21caf'];
 const W = 640;
-const Legend = ({ items }: { items: { name: string; color: string }[] }) => <div className="flex flex-wrap gap-3 text-[11px] text-steel-700 mt-1">{items.map((i) => <span key={i.name} className="inline-flex items-center gap-1"><i className="inline-block w-3 h-3 rounded-sm" style={{ background: i.color }} />{i.name}</span>)}</div>;
+const Legend = ({ items }: { items: { name: string; color: string }[] }) => <div className="flex flex-wrap gap-2 text-[11px] mt-1" data-testid="legend">{items.map((i) => <span key={i.name} className="rounded-full px-2 py-0.5 font-semibold text-white" style={{ background: i.color }}>{i.name}</span>)}</div>;
 const Svg = ({ h, children, label }: { h: number; children: ReactNode; label: string }) => <svg role="img" aria-label={label} viewBox={`0 0 ${W} ${h}`} className="w-full h-auto max-w-[900px]">{children}</svg>;
 
 const NAME_W = 165; // fixed cell-name column: never shares space with bars or negative labels
 const GUTTER = 58; // reserved space left of the 0% axis for negative value labels
 const ROW = 34;
 const NoData = () => <span className="inline-block rounded-full px-2 text-[12px] leading-5" style={{ background: '#E2E8F0', color: '#94a3b8' }}>no data</span>;
-const Name = ({ text }: { text: string }) => <div className="shrink-0 truncate text-[13px] text-slate-800" style={{ width: NAME_W, flexShrink: 0 }} title={text}>{text}</div>;
+const Name = ({ text, sub }: { text: string; sub?: ReactNode }) => <div className="shrink-0 text-[13px] text-slate-800 min-w-0" style={{ width: NAME_W, flexShrink: 0 }} title={text}><div className="truncate leading-[16px]">{text}</div>{sub && <div className="flex items-center gap-1 leading-[16px] text-[11px] text-slate-500 whitespace-nowrap">{sub}</div>}</div>;
 const Empty = () => <div className="text-slate-500 p-4 text-[13px]">No data to chart.</div>;
 
 /** Horizontal grouped bars on a shared axis. Plain HTML/CSS rows, so type and bars never scale with screen width. */
 export function HBars({ rows, series, label, fmt = (v: number) => `${(v * 100).toFixed(0)}%`, marker, bandColour = false, zero = true }: {
-  rows: { label: string; values: (number | null)[] }[]; series: { name: string; color: string }[]; label: string; fmt?: (v: number) => string; marker?: (rowIdx: number) => number | null; bandColour?: boolean; zero?: boolean }) {
+  rows: { label: string; sub?: ReactNode; values: (number | null)[] }[]; series: { name: string; color: string }[]; label: string; fmt?: (v: number) => string; marker?: (rowIdx: number) => number | null; bandColour?: boolean; zero?: boolean }) {
   const vals = rows.flatMap((r) => r.values).filter((v): v is number => v !== null);
   const marks = rows.map((_, i) => marker?.(i) ?? null).filter((v): v is number => v !== null);
   if (!rows.length) return <Empty />;
@@ -26,14 +26,14 @@ export function HBars({ rows, series, label, fmt = (v: number) => `${(v * 100).t
   const pos = (v: number) => ((v - lo) / range) * 100; const bh = series.length === 1 ? 14 : series.length === 2 ? 12 : 9;
   return <div role="img" aria-label={label}>
     {rows.map((r, i) => <div key={`${i}-${r.label}`} className="flex items-center" style={{ height: ROW }}>
-      <Name text={r.label} />
-      <div className="relative flex-1" style={{ height: ROW, marginLeft: GUTTER, marginRight: 52 }}>
+      <Name text={r.label} sub={r.sub} />
+      <div className="relative flex-1" style={{ height: ROW, marginLeft: GUTTER, paddingRight: 48 }}><div className="relative" style={{ height: ROW }}>
         <div className="absolute top-0 bottom-0" style={{ left: `${pos(0)}%`, width: 1, background: '#94a3b8' }} />
         {r.values.every((v) => v === null) && <div className="absolute" style={{ left: `${pos(0)}%`, top: 6, marginLeft: 6 }}><NoData /></div>}
         {r.values.map((v, j) => v === null ? null : <div key={j} className="absolute" style={{ top: (ROW - (bh * series.length + 2 * (series.length - 1))) / 2 + j * (bh + 2), height: bh, left: `${pos(Math.min(0, v))}%`, width: `${Math.abs(v) / range * 100}%`, background: bandColour && series.length === 1 ? BAND_COL[band(v)] : series[j].color, borderRadius: 2 }} title={`${r.label} · ${series[j].name}: ${fmt(v)}`}>
           <span className="absolute text-[12px] leading-none whitespace-nowrap tabular-nums" style={{ top: Math.max(0, (bh - 12) / 2), ...(v >= 0 ? { left: '100%', marginLeft: 4 } : { right: '100%', marginRight: 4 }) }}>{bh >= 12 ? fmt(v) : ''}</span></div>)}
         {marker && marker(i) !== null && <div className="absolute" style={{ left: `${pos(marker(i)!)}%`, top: 3, bottom: 3, width: 2, background: '#0F172A' }} title="Class limit" />}
-      </div></div>)}
+      </div></div></div>)}
     <Legend items={[...series, ...(marker ? [{ name: 'Class limit', color: '#0F172A' }] : [])]} /></div>;
 }
 
@@ -109,12 +109,12 @@ export function FlowMap({ flow, links, names }: { flow: FlowResult; links: { par
 }
 
 /** Diverging bars centred on 0%: overloaded cells extend left (rose), spare headroom extends right (emerald). */
-export function DivergingBars({ rows, label }: { rows: { label: string; value: number | null; tag: string }[]; label: string }) {
+export function DivergingBars({ rows, label }: { rows: { label: string; value: number | null; tag: string; passport?: boolean }[]; label: string }) {
   const vals = rows.map((r) => r.value).filter((v): v is number => v !== null);
   if (!vals.length) return <Empty />;
   const ext = Math.max(0.1, ...vals.map((v) => Math.abs(v)));
   return <div role="img" aria-label={label}>
-    <div className="flex text-[12px] text-slate-500" style={{ paddingLeft: NAME_W }}><span style={{ marginLeft: GUTTER }} className="text-rose-600">← overloaded</span><span className="flex-1 text-center">0%</span><span className="text-emerald-600" style={{ marginRight: 200 }}>spare headroom →</span></div>
+    <div className="flex text-[12px] text-slate-500" style={{ paddingLeft: NAME_W }}><span style={{ marginLeft: GUTTER }} className="text-rose-600">← overloaded</span><span className="flex-1 text-center">0%</span><span className="text-emerald-600" style={{ marginRight: 250 }}>spare headroom →</span></div>
     {rows.map((r, i) => <div key={`${i}-${r.label}`} className="flex items-center" style={{ height: ROW }}>
       <Name text={r.label} />
       <div className="relative flex-1" style={{ height: ROW, marginLeft: GUTTER, marginRight: 8 }}>
@@ -124,7 +124,7 @@ export function DivergingBars({ rows, label }: { rows: { label: string; value: n
           <div className="absolute" style={{ top: 8, height: 18, left: r.value < 0 ? `${50 - (Math.min(ext, -r.value) / ext) * 50}%` : '50%', width: `${(Math.min(ext, Math.abs(r.value)) / ext) * 50}%`, background: r.value < 0 ? '#E11D48' : '#059669', borderRadius: 2 }} title={`${r.label}: ${(r.value * 100).toFixed(1)}%`}>
             <span className="absolute text-[12px] leading-[18px] font-semibold whitespace-nowrap tabular-nums" style={r.value < 0 ? { right: '100%', marginRight: 4 } : { left: '100%', marginLeft: 4 }}>{(r.value * 100).toFixed(1)}%</span></div>}
       </div>
-      <div className="shrink-0 truncate text-[12px] text-slate-600" style={{ width: 200 }} title={r.tag}>{r.tag}</div></div>)}</div>;
+      <div className="shrink-0 flex items-center gap-1 text-[12px] text-slate-600 min-w-0" style={{ width: 250 }}><BasisPill passport={!!r.passport} /><span className="truncate" title={r.tag}>{r.tag}</span></div></div>)}</div>;
 }
 
 export function Ring({ value, size = 84, label }: { value: number | null; size?: number; label: string }) {

@@ -4,7 +4,7 @@ import { allGates, isOverdue, level, ratingKey, score } from '../engine/governan
 import { runSelfTest, TOL } from '../engine/selftest';
 import type { Rating, RegItem, RegType } from '../engine/types';
 import { useApp } from '../store';
-import { Card, FocusRow, NumInput, Sel, Th, Toggle } from './kit';
+import { Card, FocusRow, NumInput, Sel, SourceBadge, Th, Toggle } from './kit';
 
 const RC: Record<string, string> = { Met: '#1f8a4c', Partial: '#c98a00', 'Not met': '#c0392b', '': '#8a97a5' };
 const LC: Record<string, string> = { HIGH: '#c0392b', MEDIUM: '#c98a00', LOW: '#1f8a4c', UNSCORED: '#8a97a5' };
@@ -28,7 +28,7 @@ export function WsGovernance() {
       <button className="btn-p" data-testid="add-all-cells" disabled={workbookCells.every((c) => model.assessor.cells.includes(c))} onClick={() => edit((d) => { workbookCells.forEach((c) => { if (!d.assessor.cells.includes(c)) d.assessor.cells.push(c); }); })}>+ Add All Workbook Cells</button>
       <span className="text-xs text-slate-500">{model.assessor.cells.length} of {workbookCells.length} workbook cells on the Assessor</span>{!workbookCells.length && <span className="text-xs text-amber-700" data-testid="gov-onboarding">No cells yet: import a workbook or add cell lines in 2. Data &amp; Gap Filler, then press + Add All Workbook Cells.</span>}</section>
 
-    <Card title="Gate Assessor" term="Gate Assessor" right={<span className="text-xs">HS&amp;E themes (3 and 7) rated Not met → gate BLOCKED</span>}>
+    <Card title="Gate Assessor" term="Gate Assessor" source="Gate Assessor ratings (per cell)" right={<span className="text-xs">HS&amp;E themes (3 and 7) rated Not met → gate BLOCKED</span>}>
       <div className="overflow-auto"><table className="w-full min-w-[900px]"><thead><tr><Th>Theme</Th>{GATES.map((g) => <Th key={g}><div>{g}</div><button className="btn mt-1 text-[11px] !py-0.5" data-testid={`mark-met-${g}`} onClick={() => markMet(g)}>Mark Gate Met</button></Th>)}</tr></thead><tbody>
         {THEMES.map((t, ti) => <tr key={t}><td className="td font-medium whitespace-nowrap">{ti + 1}. {t}{HSE_THEMES.includes(ti + 1) && <span className="chip bg-bad ml-1">HS&amp;E</span>}</td>
           {GATES.map((g) => { const r = model.assessor.ratings[ratingKey(g, ti + 1, active)] ?? ''; return <td key={g} className={`td w-28 ${focus?.kind === 'assessor' && focus.ref === g ? 'focus-flash' : ''}`}>
@@ -40,7 +40,7 @@ export function WsGovernance() {
       <details className="mt-3"><summary className="cursor-pointer font-semibold">Evidence Check: tick the evidence behind each gate</summary>
         <table className="w-full mt-2"><thead><tr><Th>Evidence</Th>{GATES.map((g) => <Th key={g}>{g}</Th>)}</tr></thead><tbody>{EVIDENCE.map((e, ei) => <tr key={e}><td className="td">{ei + 1}. {e}</td>{GATES.map((g) => <td key={g} className="td"><Toggle label={`${g} evidence ${ei + 1}`} on={!!model.assessor.evidence[g]?.[ei]} onText="YES" offText="NO" onChange={(v) => edit((d) => { const a = d.assessor.evidence[g] ?? Array(6).fill(false); a[ei] = v; d.assessor.evidence[g] = a; })} /></td>)}</tr>)}</tbody></table></details></Card>
 
-    <Card title="Risks, Assumptions, Opportunities & Actions" term="Register" right={<button className="btn-p" onClick={() => edit((d) => d.register.push({ id: `R${String(d.register.length + 1).padStart(2, '0')}`, type: 'Risk', title: '', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: '', probability: null }))}>+ Add item</button>}>
+    <Card title="Risks, Assumptions, Opportunities & Actions" term="Register" source="Risk, Assumption, Opportunity &amp; Action Register" right={<button className="btn-p" onClick={() => edit((d) => d.register.push({ id: `R${String(d.register.length + 1).padStart(2, '0')}`, type: 'Risk', title: '', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: '', probability: null }))}>+ Add item</button>}>
       <div className="overflow-auto"><table className="w-full min-w-[1150px]"><thead><tr><Th>Ref</Th><Th>Type</Th><Th>Title</Th><Th>Owner</Th><Th>Cell / FPD</Th><Th>Probability (1–5)</Th><Th>Time (1–5)</Th><Th>Cost (1–5)</Th><Th term="Impact Score">Score</Th><Th>Level</Th><Th>Due</Th><Th>Status</Th><Th>Flags</Th><th className="th" /></tr></thead>
         <tbody>{model.register.map((r, i) => { const s = score(r), lv = level(s), od = isOverdue(r, asOf); return <FocusRow key={r.id + i} match={focus?.kind === 'risk' && focus.ref === r.id}>
           <td className="td">{r.id}</td>
@@ -67,7 +67,7 @@ export function SelfTestDrawer() {
   const tests = useMemo(() => runSelfTest(model), [model]);
   const passed = tests.filter((t) => t.pass).length;
   return (
-<details className="card" data-testid="selftest-drawer"><summary className="card-h cursor-pointer">10-Point Mathematical Self-Test<span className={`chip ml-2 ${passed === tests.length ? 'bg-emerald-600' : 'bg-rose-600'}`} data-testid="selftest-total">{passed} / {tests.length} Passed</span></summary>
+<details className="card" data-testid="selftest-drawer"><summary className="card-h cursor-pointer">10-Point Mathematical Self-Test<SourceBadge source="Factory Model, Cell Passport &amp; Product Flow (FPD)" /><span className={`chip ml-2 ${passed === tests.length ? 'bg-emerald-600' : 'bg-rose-600'}`} data-testid="selftest-total">{passed} / {tests.length} Passed</span></summary>
       <div className="p-3"><p className="text-xs text-slate-500 mb-2">Every figure is recomputed by a separate route and compared within {(TOL * 100).toFixed(3)}% tolerance.</p>
       <table className="w-full"><thead><tr><Th>#</Th><Th>Check</Th><Th>Result</Th><Th>Detail</Th></tr></thead><tbody>{tests.map((t) => <tr key={t.id} data-testid={`selftest-${t.id}`}><td className="td">{t.id}</td><td className="td font-medium">{t.name}</td><td className="td"><span className="chip" style={{ background: t.pass ? '#059669' : '#E11D48' }}>{t.pass ? 'PASS' : 'FAIL'}</span></td><td className="td text-slate-700">{t.detail}</td></tr>)}</tbody></table></div></details>
   );

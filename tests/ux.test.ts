@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
+import { emptyModel } from '../src/engine/blank';
 import { demoModel } from './fixtures/sample';
 import { RULES, runChecks } from '../src/engine/checks';
 import { PLAIN } from '../src/engine/plainEnglish';
 import { calcAsset, normalisePct, cells, shiftHoursFor } from '../src/engine/calc';
-import { executiveTakeaway, factoryOverview, fpdFactories, nextActions, readiness, scopeChecks, statusReason } from '../src/engine/overview';
+import { cellIsPassport, executiveTakeaway, factoryOverview, fpdFactories, fpdHeadroomByCell, nextActions, readiness, scopeChecks, statusBasis, statusReason } from '../src/engine/overview';
 import { gateStatus, ratingKey } from '../src/engine/governance';
 import { impactMessage } from '../src/engine/toast';
 import { exportWorkbook, parseWorkbook, readWorkbook } from '../src/engine/xlsx';
@@ -91,4 +92,18 @@ describe('standard shift labels resolve (no false DC07)', () => {
     c.assets[0].shift = ''; expect(runChecks(c).issues.filter((i) => i.rule === 'DC07').length).toBe(1);
   });
   it('capacity uses the resolved hours', () => { const a = base(), b = demoModel(); a.assets[0].shift = 'three shifts'; b.assets[0].shift = '3 Shifts'; expect(calcAsset(a, a.assets[0], 'model').headroom).toBeCloseTo(calcAsset(b, b.assets[0], 'model').headroom!, 12); });
+});
+
+describe('data source definition', () => {
+  const m = demoModel();
+  it('cells are Passport or Factory Model by their Passport flag', () => { expect(cellIsPassport(m, 'HT', '02_HTMF_UTAQW')).toBe(true); expect(cellIsPassport(m, 'DPF', '07_DPF_MACHN')).toBe(false); expect(cellIsPassport(m, 'DPF', 'NOPE')).toBe(false); });
+  it('the status basis names the sources in scope', () => {
+    expect(statusBasis(m, 'All')).toBe('Cell Passport + Factory Model'); const noPassport = structuredClone(m); noPassport.cellLines.forEach((c) => { c.passport = false; }); noPassport.assets.forEach((a) => { a.passportLoadHrs = null; a.passportOee = null; });
+    expect(statusBasis(noPassport, 'All')).toBe('Factory Model'); expect(statusBasis(emptyModel(), 'All')).toBe('Factory Model');
+  });
+  it('the Product Flow (FPD) view is 1 − FPD hours ÷ effective capacity, null where no FPD touches the cell', () => {
+    const f = fpdHeadroomByCell(m); const key = 'HT|02_HTMF_UTAQW'; expect(f[key]).not.toBeNull(); expect(f[key]!).toBeLessThan(1);
+    const c = structuredClone(m); c.fpds.forEach((p) => { p.route = ['OTHER']; }); expect(Object.values(fpdHeadroomByCell(c)).every((v) => v === null)).toBe(true);
+    expect(fpdHeadroomByCell(emptyModel())).toEqual({});
+  });
 });

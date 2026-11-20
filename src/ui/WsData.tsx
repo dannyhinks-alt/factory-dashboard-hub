@@ -56,7 +56,7 @@ export function WsData() {
 
   return <div className="grid gap-4">
     {!model.assets.length && !model.cellLines.length && <section className="card accent-watch p-4" data-testid="data-onboarding"><b>Nothing loaded yet. Two ways to start:</b><ol className="list-decimal ml-5 mt-1 space-y-1 text-slate-700"><li><b>Import:</b> use <i>Open .xlsx</i> in the top bar for your LEAN CELL DESIGN workbook, or open a saved <i>.json</i> auto-save from the start screen. Every gap is then listed and can be fixed here.</li><li><b>Type it in:</b> add a factory in <i>Central Lists</i> below, press <i>+ Add cell line</i>, then <i>+ Add asset</i> for each machine group.</li></ol></section>}
-    <Card title="Guided data & gap filler: cell summary lines with their assets beneath" right={<><button className="btn" onClick={addCell}>+ Add cell line</button><button className="btn-p" onClick={add}>+ Add asset</button></>}>
+    <Card title="Guided data & gap filler: cell summary lines with their assets beneath" source="Factory Model block + Cell Design Passport block (Data sheet)" right={<><button className="btn" onClick={addCell}>+ Add cell line</button><button className="btn-p" onClick={add}>+ Add asset</button></>}>
       <div className="flex flex-wrap gap-3 mb-3">
         {globalFac === 'All' && <Field label="Factory" term="Factory"><Sel label="Factory filter" gap={false} blank="All factories" value={fac === 'All' ? '' : fac} options={factories} onChange={(v) => { setFac(v || 'All'); setCell('All'); setAsset('All'); }} /></Field>}
         <Field label="Cell"><Sel label="Cell filter" gap={false} blank="All cells" value={cell === 'All' ? '' : cell} options={cellsOf} onChange={(v) => { setCell(v || 'All'); setAsset('All'); }} /></Field>
@@ -104,7 +104,7 @@ export function WsData() {
       {!groups.length && <p className="p-4 text-slate-500">Nothing matches. Clear the filters, or add a cell line and its assets.</p>}</Card>
 
     <div className="grid lg:grid-cols-2 gap-4">
-      <Card title="Calculation settings">
+      <Card title="Calculation settings" source="Settings sheet">
         <div className="grid gap-3">
           <div className="flex items-center gap-3"><Label term="OEE Mode">OEE Mode</Label><Seg label="OEE Mode" value={S.oeeMode} options={['Model', 'Passport', 'None'] as const} onChange={(v) => edit((d) => { d.settings.oeeMode = v; })} /></div>
           <div className="flex items-center gap-3"><Label term="Complexity Class">Default complexity class</Label><div className="w-40"><Sel label="Default complexity class" value={S.defaultComplexity} options={Object.keys(S.limits)} onChange={(v) => edit((d) => { d.settings.defaultComplexity = v; })} /></div></div>
@@ -116,13 +116,13 @@ export function WsData() {
             <div className="grid grid-cols-4 gap-2">{Object.keys(S.limits).map((k) => <Field key={k} label={`${k} %`}><NumInput pct label={`Limit ${k}`} value={S.limits[k]} onChange={(v) => edit((d) => { d.settings.limits[k] = v; })} /></Field>)}</div></div>
         </div></Card>
 
-      <Card title="Shift Calendar (hours per week)" term="Shift Pattern" right={<AddShift />}>
+      <Card title="Shift Calendar (hours per week)" term="Shift Pattern" source="Settings sheet" right={<AddShift />}>
         <table className="w-full"><thead><tr><Th>Shift pattern</Th><Th>Hours per week</Th><Th>Calendar share</Th></tr></thead><tbody>{Object.keys(S.shiftHours).map((k) => <tr key={k}><td className="td">{k}</td><td className="td w-32"><NumInput label={`Hours per week for ${k}`} value={S.shiftHours[k]} onChange={(v) => edit((d) => { d.settings.shiftHours[k] = v; })} /></td><td className="td font-mono">{S.shiftHours[k] ? ((S.shiftHours[k]! / 168) * 100).toFixed(0) + '%' : '–'}</td></tr>)}</tbody></table></Card>
 
-      <Card title="Confirm Placeholders" term="Confirm Placeholders" right={<span className="text-xs">{PLACEHOLDERS.filter((p) => S.confirmed[p]).length}/8 confirmed</span>}>
+      <Card title="Confirm Placeholders" term="Confirm Placeholders" source="Settings sheet" right={<span className="text-xs">{PLACEHOLDERS.filter((p) => S.confirmed[p]).length}/8 confirmed</span>}>
         <ul className="divide-y divide-steel-100">{PLACEHOLDERS.map((p) => <li key={p} className={`flex items-center justify-between py-1.5 ${flash(p, 'setting')}`}><span>{p}</span><Toggle label={`Confirm ${p}`} on={!!S.confirmed[p]} onText="YES" offText="NO" onChange={(v) => edit((d) => { d.settings.confirmed[p] = v; })} /></li>)}</ul></Card>
 
-      <Card title="Cost entries (Settings)" right={<button className="btn" onClick={() => edit((d) => d.settings.costEntries.push({ id: `K${Date.now().toString(36)}`, asset: '', cost: null, unc: null, raw: '' }))}>+ Add cost entry</button>}>
+      <Card title="Cost entries (Settings)" source="Settings sheet" right={<button className="btn" onClick={() => edit((d) => d.settings.costEntries.push({ id: `K${Date.now().toString(36)}`, asset: '', cost: null, unc: null, raw: '' }))}>+ Add cost entry</button>}>
         <table className="w-full"><thead><tr><Th>Asset</Th><Th>Cost £</Th><Th>Uncertainty %</Th><th className="th" /></tr></thead><tbody>{S.costEntries.map((k, i) => <tr key={k.id} className={focus?.kind === 'setting' && focus.ref === `cost:${k.id}` ? 'focus-flash' : ''}>
           <td className="td"><Sel label="Cost entry asset" value={k.asset} options={[...new Set(model.assets.map((a) => a.asset))]} onChange={(v) => edit((d) => { d.settings.costEntries[i].asset = v; })} /></td>
           <td className="td w-32"><NumInput label="Cost entry" gap={false} value={k.cost} onChange={(v) => edit((d) => { d.settings.costEntries[i].cost = v; d.settings.costEntries[i].raw = v === null ? '' : String(v); })} /></td>
@@ -130,7 +130,7 @@ export function WsData() {
           <td className="td"><button className="text-bad" aria-label="Delete cost entry" onClick={() => edit((d) => { d.settings.costEntries.splice(i, 1); })}>🗑</button></td></tr>)}</tbody></table>
         {!S.costEntries.length && <p className="text-steel-500">No cost entries. Per-machine costs can also be typed on the asset lines.</p>}</Card>
 
-      <Card title="Central Lists">
+      <Card title="Central Lists" source="Settings sheet">
         <div className="grid gap-4">
           <ListEditor name="Factory codes (Settings)" items={factories} onChange={(v) => edit((d) => { const w: Record<string, number | null> = {}; v.forEach((f) => (w[f] = d.settings.plannedWeeks[f] ?? null)); d.settings.plannedWeeks = w; })} />
           {Object.entries({ Factories: [], Cells: [], Assets: [], ...S.lists }).map(([k, v]) => <ListEditor key={k} name={k} items={v} onChange={(nv) => edit((d) => { d.settings.lists[k] = nv; })} />)}

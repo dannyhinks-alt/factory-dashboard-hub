@@ -335,12 +335,12 @@ console.log('9. Overall Combined card, compact charts, dense Data table, tooltip
   for (const n of [1, 2, 3, 4]) { await page.getByTestId(`ws-${n}`).click(); ok((await barSvgs()) === 0, `workspace ${n}: no scaled svg bar charts`); }
   await page.getByTestId('ws-1').click();
   // three-views chart: name column 165px, negative labels never overlap names
-  const chart = page.locator('[aria-label="Model, restated and Passport headroom"]'); const row = chart.locator('> div').first();
+  const chart = page.locator('[aria-label="Factory Model, Cell Design Passport and Product Flow headroom"]'); const row = chart.locator('> div').first();
   const nameBox = await row.locator('> div').first().boundingBox(); ok(Math.round(nameBox.width) === 165, `cell name column is 165px (${Math.round(nameBox.width)})`);
   ok((await row.boundingBox()).height <= 36, 'chart rows are 32–36px');
   const overlaps = await chart.evaluate((el) => { const bad = []; el.querySelectorAll(':scope > div').forEach((r) => { const name = r.children[0]?.getBoundingClientRect(); r.querySelectorAll('span').forEach((sp) => { const b = sp.getBoundingClientRect(); if (sp.textContent && /^-/.test(sp.textContent.trim()) && name && b.left < name.right - 0.5) bad.push(sp.textContent); }); }); return bad; });
   ok(overlaps.length === 0, 'negative value labels never overlap cell names' + (overlaps.length ? ': ' + overlaps : ''));
-  const fs = await chart.locator('span').first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs === '12px' || fs === '13px', `chart text stays small on wide screens (${fs})`);
+  const fs = await page.locator('[aria-label="Effective utilisation versus class limit"] span', { hasText: /%$/ }).first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs === '12px' || fs === '13px', `chart text stays small on wide screens (${fs})`);
   await page.setViewportSize({ width: 2200, height: 1000 }); const fs2 = await chart.locator('> div').first().locator('> div').first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs2 === '13px', 'label type is 13px even at 2200px width');
   await page.setViewportSize({ width: 1500, height: 1000 });
   // dense data table, unclipped factory selector, tooltips
@@ -437,6 +437,30 @@ console.log('11. Save App + Data (.html): the app file carries the data');
   const [dl] = await Promise.all([c.page.waitForEvent('download'), c.page.getByTestId('save-app-data').click()]);
   ok(dl.suggestedFilename() === 'Factory_Dashboard_Hub_Master.html', 'a download fallback is used without showSaveFilePicker');
   await c.ctx.close();
+}
+
+console.log('12. Data source defined on every chart, card and row');
+{
+  const { ctx, page, errors } = await fresh();
+  await loadSample(page);
+  const cardsWithout = async () => page.evaluate(() => [...document.querySelectorAll('main section.card, main details.card')].filter((c) => { const h = c.querySelector('.card-h'); return h && !h.querySelector('[data-testid=source-badge]') && !/Scope filters/.test(h.textContent || ''); }).map((c) => c.querySelector('.card-h').textContent.slice(0, 50)));
+  for (const n of [1, 2, 3, 4]) { await page.getByTestId(`ws-${n}`).click(); const missing = await cardsWithout(); ok(missing.length === 0, `workspace ${n}: every card header carries a Data Source badge` + (missing.length ? ' — missing: ' + missing.join(' | ') : '')); }
+  await page.getByTestId('ws-1').click();
+  const badge = async (title) => (await page.locator('section.card', { has: page.locator('.card-h', { hasText: title }) }).first().locator('[data-testid=source-badge]').first().innerText());
+  ok((await badge('Cell capacity & headroom')) === 'Data Source: Cell Passport (where linked) / Factory Model (Data sheet)', 'Cell capacity & headroom source text');
+  ok((await badge('Effective Utilisation vs Complexity Class Limit')) === 'Data Source: Factory Model & Cell Passport (OEE-adjusted)', 'Utilisation chart source text');
+  const capRows = page.locator('[aria-label="Cell headroom diverging chart"] [data-testid=basis-pill]');
+  const bases = await capRows.evaluateAll((els) => els.map((e) => e.getAttribute('data-basis') + ':' + e.textContent)); ok(bases.length === 3 && bases.some((b) => b === 'passport:Passport') && bases.some((b) => b === 'model:Factory Model'), `every cell row has a Passport / Factory Model pill (${bases.join(', ')})`);
+  const pill = await page.locator('[aria-label="Cell headroom diverging chart"] [data-basis=passport]').first().evaluate((e) => getComputedStyle(e).backgroundColor); ok(pill === 'rgb(15, 118, 110)', 'Passport pill is teal'); ok((await page.locator('[aria-label="Cell headroom diverging chart"] [data-basis=model]').first().evaluate((e) => getComputedStyle(e).backgroundColor)) === 'rgb(100, 116, 139)', 'Factory Model pill is slate');
+  const util = page.locator('[aria-label="Effective utilisation versus class limit"]'); const utilPills = await util.locator('[data-testid=basis-pill]').allInnerTexts(); ok(utilPills.length > 0 && utilPills.every((t) => t === 'Passport' || t === 'Model only'), `utilisation rows show Cell ID + Passport / Model only (${utilPills.join(', ')})`);
+  ok((await util.locator('div.truncate').first().innerText()).length > 0 && /_/.test(await util.innerText()), 'Cell ID is shown under the asset name');
+  const clip = await util.evaluate((el) => { const box = el.getBoundingClientRect(); const bad = []; el.querySelectorAll('span').forEach((sp) => { if (/%$/.test((sp.textContent || '').trim())) { const r = sp.getBoundingClientRect(); if (r.right > box.right + 0.5) bad.push(sp.textContent); } }); return bad; }); ok(clip.length === 0, 'right-edge value labels (e.g. 109%) are not clipped' + (clip.length ? ': ' + clip : ''));
+  ok(await util.evaluate((el) => [...el.querySelectorAll('div')].some((d) => getComputedStyle(d).paddingRight === '48px')), 'bar track has padding-right 48px');
+  ok(/Basis: (Cell Passport \+ )?Factory Model/.test(await page.getByTestId('verdict').innerText()) && /Basis:/.test(await page.getByTestId('status-pill').innerText()), 'status banner and header pill state the basis');
+  await page.getByTestId('ws-1').click();
+  const legend = await page.locator('section.card', { has: page.locator('.card-h', { hasText: 'three views' }) }).locator('[data-testid=legend]').innerText(); ok(/1\. Factory Model/.test(legend) && /2\. Cell Design Passport/.test(legend) && /3\. Product Flow \(FPD\)/.test(legend), 'three-views legend pills labelled 1 / 2 / 3');
+  await page.getByTestId('ws-3').click(); ok((await page.locator('[data-testid=source-badge]', { hasText: 'Product Flow (FPD)' }).count()) >= 7, 'flow cards all say Source: Product Flow (FPD)');
+  ok(errors.length === 0, 'zero console errors' + (errors.length ? ': ' + errors.join(' | ') : '')); await ctx.close();
 }
 await browser.close();
 console.log(failed ? `\n${failed} FAILED` : '\nALL E2E CHECKS PASSED'); process.exit(failed ? 1 : 0);

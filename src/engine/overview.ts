@@ -1,6 +1,6 @@
 import { RULES } from './checks';
 import type { CheckResult } from './checks';
-import { calcAsset, cells, compareRows, costByFactory, factoriesOf, gbp, n1, pct } from './calc';
+import { calcAsset, cellKey, cellList, cells, compareRows, costByFactory, factoriesOf, gbp, n1, pct } from './calc';
 import type { AssetCalc, CellCalc } from './calc';
 import { solve } from './flow';
 import { allGates } from './governance';
@@ -100,3 +100,30 @@ export function combinedOverview(m: Model): CombinedOverview {
     bottleneck: hs.length ? hs.reduce((a, b) => (b.headroom! < a.headroom! ? b : a)) : null };
 }
 const sum = (ov: FactoryOverview[], k: 'green' | 'amber' | 'red' | 'machines' | 'assets' | 'capex' | 'likelyLow' | 'likelyHigh' | 'space') => ov.reduce((s, o) => s + o[k], 0);
+
+/** Which data a cell's numbers come from: its Cell Design Passport (when the cell is flagged as one) or the Factory Model only. */
+export const cellIsPassport = (m: Model, factory: string, cell: string): boolean =>
+  m.cellLines.some((c) => c.cell === cell && (!factory || !c.factory || c.factory === factory) && c.passport);
+
+/** Basis tag for the overall status: the sources the verdict is actually built from, within the active factory filter. */
+export function statusBasis(m: Model, factory: string): string {
+  const inScope = (f: string) => factory === 'All' || f === factory;
+  const passport = m.cellLines.some((c) => c.passport && inScope(c.factory)) || m.assets.some((a) => inScope(a.factory) && (a.passportLoadHrs !== null || a.passportOee !== null));
+  return passport ? 'Cell Passport + Factory Model' : 'Factory Model';
+}
+
+/**
+ * Headroom implied by the Product Flow (FPD) definitions: 1 − (FPD hours routed through the cell ÷ the cell's effective capacity).
+ * Purpose: a third, independent view beside the Factory Model and the Cell Design Passport. Formula: FPD hours are shared equally
+ * across the cells of each route; capacity = Σ over assets of scheduled hours × OEE × class limit. Null when no FPD uses the cell.
+ */
+export function fpdHeadroomByCell(m: Model): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  for (const { factory, cell } of cellList(m)) {
+    const load = m.fpds.reduce((s, p) => (p.hours !== null && p.route.includes(cell) ? s + p.hours / Math.max(1, p.route.length) : s), 0);
+    const touched = m.fpds.some((p) => p.hours !== null && p.route.includes(cell));
+    const capacity = m.assets.filter((a) => a.factory === factory && a.cell === cell).map((a) => calcAsset(m, a, 'model')).filter((c) => c.complete).reduce((s, c) => s + c.avail! * c.oee! * c.limit!, 0);
+    out[cellKey(factory, cell)] = touched && capacity > 0 ? 1 - load / capacity : null;
+  }
+  return out;
+}

@@ -5,7 +5,8 @@ import { BandChip } from './kit';
 import { band, pct, n1 } from '../engine/calc';
 import { pressureList, releaseCandidates, scenarioResult, testSets } from '../engine/sensitivity';
 import { useApp } from '../store';
-import { Card, Empty, Field, FocusRow, NumInput, Sel, Th } from './kit';
+import { BasisPill, Card, Empty, Field, FocusRow, NumInput, Sel, Th } from './kit';
+import { cellIsPassport } from '../engine/overview';
 import { factoriesOf } from '../engine/calc';
 
 export function WsSensitivity() {
@@ -28,12 +29,12 @@ export function WsSensitivity() {
   const assetOpts = model.assets.map((a) => assetKey(a.factory, a.cell, a.asset));
   if (!model.assets.length) return <Empty><b>No assets yet.</b><br />The pressure list, 3-set lever tester and scenario log fill in once assets with load, machines and shifts are loaded. Import a workbook or add assets in <b>2. Data &amp; Gap Filler</b>.</Empty>;
   return <div className="grid gap-4">
-    <Card title="Pressure List" term="Break-Even" right={<span className="text-xs">Worst headroom first; each column is a single-lever break-even</span>}>
-      <div className="overflow-auto max-h-[50vh]"><table className="w-full"><thead><tr><Th>#</Th><Th>Factory</Th><Th>Cell</Th><Th>Asset</Th><Th term="Headroom">Headroom</Th><Th>Band</Th><Th term="Break-Even">Load change</Th><Th>OEE needed</Th><Th term="Machines to add">Machines to add</Th><Th>Shift pattern needed</Th></tr></thead>
-        <tbody>{pl.map((p, i) => <FocusRow key={p.c.asset.id} match={focus?.kind === 'asset' && focus.ref === p.c.asset.id}><td className="td">{i + 1}</td><td className="td">{p.c.asset.factory}</td><td className="td">{p.c.asset.cell}</td><td className="td font-medium">{p.c.asset.asset}</td><td className="td font-mono">{pct(p.headroom)}</td><td className="td"><BandChip band={band(p.headroom)} /></td>
+    <Card title="Pressure List" term="Break-Even" source="Factory Model (Data sheet)" right={<span className="text-xs">Worst headroom first; each column is a single-lever break-even</span>}>
+      <div className="overflow-auto max-h-[50vh]"><table className="w-full"><thead><tr><Th>#</Th><Th>Factory</Th><Th>Cell</Th><Th>Source</Th><Th>Asset</Th><Th term="Headroom">Headroom</Th><Th>Band</Th><Th term="Break-Even">Load change</Th><Th>OEE needed</Th><Th term="Machines to add">Machines to add</Th><Th>Shift pattern needed</Th></tr></thead>
+        <tbody>{pl.map((p, i) => <FocusRow key={p.c.asset.id} match={focus?.kind === 'asset' && focus.ref === p.c.asset.id}><td className="td">{i + 1}</td><td className="td">{p.c.asset.factory}</td><td className="td">{p.c.asset.cell}</td><td className="td"><BasisPill passport={cellIsPassport(model, p.c.asset.factory, p.c.asset.cell)} /></td><td className="td font-medium">{p.c.asset.asset}</td><td className="td font-mono">{pct(p.headroom)}</td><td className="td"><BandChip band={band(p.headroom)} /></td>
           <td className="td font-mono">{p.loadChange >= 0 ? '+' : ''}{(p.loadChange * 100).toFixed(1)}%</td><td className="td font-mono">{pct(p.oeeNeeded)}{p.oeeNeeded! > 1 ? <span className="text-bad"> (&gt;100%)</span> : null}</td><td className="td font-mono">{p.machines}</td><td className="td">{p.shiftNeeded}</td></FocusRow>)}</tbody></table></div></Card>
 
-    <Card title="3-Set Lever tester" term="Lever Set" right={<span className="text-xs">Baseline worst cell headroom: <b>{pct(sets.baseWorst)}</b></span>}>
+    <Card title="3-Set Lever tester" term="Lever Set" source="Factory Model (Data sheet)" right={<span className="text-xs">Baseline worst cell headroom: <b>{pct(sets.baseWorst)}</b></span>}>
       <div className="grid md:grid-cols-3 gap-3">{model.levers.map((s, i) => { const r = sets.results[i]; return <div key={s.id} className={`border border-steel-200 rounded p-2 ${focus?.kind === 'lever' && focus.ref === s.id ? 'focus-flash' : ''}`} data-testid={`lever-${s.id}`}>
         <div className="font-bold mb-1">{s.id}</div>
         <div className="grid grid-cols-2 gap-2">
@@ -49,11 +50,11 @@ export function WsSensitivity() {
           <Sel label={`${s.id} quick preset`} gap={false} blank="Quick preset…" value="" options={Object.keys(QUICK_PRESETS)} onChange={(v) => v && edit((d) => { Object.assign(d.levers[i], QUICK_PRESETS[v]); })} />
           <button className="btn-p" data-testid={`log-${s.id}`} onClick={() => logSet(s)}>Log to Scenario Table</button></div></div>; })}</div></Card>
 
-    <Card title="Low-Utilisation release candidates" term="Low-Utilisation" right={<span className="text-xs">Below {pct(model.settings.lowUtilThreshold, 0)} of effective capacity</span>}>
-      {rel.length ? <table className="w-full"><thead><tr><Th>Factory</Th><Th>Cell</Th><Th>Asset</Th><Th>Machines</Th><Th term="Effective Utilisation">Effective util.</Th></tr></thead><tbody>{rel.map((c) => <FocusRow key={c.asset.id} match={focus?.kind === 'asset' && focus.ref === c.asset.id}><td className="td">{c.asset.factory}</td><td className="td">{c.asset.cell}</td><td className="td">{c.asset.asset}</td><td className="td">{c.machines}</td><td className="td font-mono">{pct(c.effUtil)}</td></FocusRow>)}</tbody></table>
+    <Card title="Low-Utilisation release candidates" term="Low-Utilisation" source="Factory Model (Data sheet)" right={<span className="text-xs">Below {pct(model.settings.lowUtilThreshold, 0)} of effective capacity</span>}>
+      {rel.length ? <table className="w-full"><thead><tr><Th>Factory</Th><Th>Cell</Th><Th>Source</Th><Th>Asset</Th><Th>Machines</Th><Th term="Effective Utilisation">Effective util.</Th></tr></thead><tbody>{rel.map((c) => <FocusRow key={c.asset.id} match={focus?.kind === 'asset' && focus.ref === c.asset.id}><td className="td">{c.asset.factory}</td><td className="td">{c.asset.cell}</td><td className="td"><BasisPill passport={cellIsPassport(model, c.asset.factory, c.asset.cell)} /></td><td className="td">{c.asset.asset}</td><td className="td">{c.machines}</td><td className="td font-mono">{pct(c.effUtil)}</td></FocusRow>)}</tbody></table>
         : <p className="text-steel-500">{model.settings.lowUtilThreshold === null ? 'Set the low-utilisation threshold in Workspace 2.' : 'No assets under the threshold.'}</p>}</Card>
 
-    <Card title="What-If Scenario log" term="Scenario" right={<button className="btn-p" onClick={() => edit((d) => d.scenarios.push({ id: `S${Date.now().toString(36)}`, name: `Scenario ${d.scenarios.length + 1}`, factory: '', cell: '', asset: '', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '', note: '', reroute: 0 }))}>+ Log scenario</button>}>
+    <Card title="What-If Scenario log" term="Scenario" source="Factory Model (Data sheet)" right={<button className="btn-p" onClick={() => edit((d) => d.scenarios.push({ id: `S${Date.now().toString(36)}`, name: `Scenario ${d.scenarios.length + 1}`, factory: '', cell: '', asset: '', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '', note: '', reroute: 0 }))}>+ Log scenario</button>}>
       <div className="overflow-auto"><table className="w-full min-w-[1100px]"><thead><tr><Th>Scenario</Th><Th>Asset</Th><Th>Load %</Th><Th>OEE pts</Th><Th>+Machines</Th><Th>Shift</Th><Th>Re-route (h)</Th><Th>Before</Th><Th>After</Th><Th>Cell before → after</Th><th className="th" /></tr></thead>
         <tbody>{model.scenarios.map((s, i) => { if (!inScope(s.factory) && s.factory) return null; const r = scenarioResult(model, s); return <FocusRow key={s.id} match={focus?.kind === 'scenario' && focus.ref === s.id}>
           <td className="td w-44"><input aria-label="Scenario name" className="inp" value={s.name} onChange={(e) => edit((d) => { d.scenarios[i].name = e.target.value; })} /></td>

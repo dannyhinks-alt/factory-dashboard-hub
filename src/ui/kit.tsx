@@ -21,8 +21,13 @@ export function Info({ term, text }: { term?: string; text?: string }) {
 export const Label = ({ children, term }: { children: ReactNode; term?: string }) => <span className="inline-flex items-center">{children}{term && <Info term={term} />}</span>;
 export const Th = ({ children, term, className = '' }: { children: ReactNode; term?: string; className?: string }) => <th className={`th ${className}`}><Label term={term}>{children}</Label></th>;
 
-export function Card({ title, term, children, right, id }: { title: ReactNode; term?: string; children: ReactNode; right?: ReactNode; id?: string }) {
-  return <section className="card" id={id}><div className="card-h"><Label term={term}>{title}</Label><span className="ml-auto flex gap-2 items-center font-normal">{right}</span></div><div className="p-3">{children}</div></section>;
+/** High-contrast "Data Source" badge: which data a chart, card or panel is built from. */
+export const SourceBadge = ({ source }: { source: string }) => <span data-testid="source-badge" className="rounded px-2 py-0.5 text-[11px] font-semibold text-white whitespace-nowrap" style={{ background: '#1E3A8A' }}>Data Source: {source}</span>;
+/** Per-row basis pill: Passport (emerald/teal) when the cell is a Cell Design Passport, otherwise the Factory Model (slate). */
+export const BasisPill = ({ passport, otherLabel = 'Factory Model' }: { passport: boolean; otherLabel?: string }) => <span data-testid="basis-pill" data-basis={passport ? 'passport' : 'model'} className="rounded-full px-2 text-[11px] leading-[18px] font-semibold text-white whitespace-nowrap" style={{ background: passport ? '#0F766E' : '#64748B' }}>{passport ? 'Passport' : otherLabel}</span>;
+
+export function Card({ title, term, children, right, id, source }: { title: ReactNode; term?: string; children: ReactNode; right?: ReactNode; id?: string; source?: string }) {
+  return <section className="card" id={id}><div className="card-h"><Label term={term}>{title}</Label>{source && <SourceBadge source={source} />}<span className="ml-auto flex gap-2 items-center font-normal">{right}</span></div><div className="p-3">{children}</div></section>;
 }
 
 export const BAND_COL: Record<Band, string> = { GREEN: '#1f8a4c', AMBER: '#c98a00', RED: '#c0392b', NONE: '#8a97a5' };

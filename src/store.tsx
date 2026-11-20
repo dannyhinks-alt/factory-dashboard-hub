@@ -12,7 +12,7 @@ export interface Ctx {
   goTo: (t: FocusTarget) => void;
   help: (term: string) => string;
   asOf: string;
-  status: { verdict: 'GOOD' | 'WATCH' | 'BAD'; reason: string };
+  status: { verdict: 'GOOD' | 'WATCH' | 'BAD'; reason: string; basis: string };
   ready: { pct: number; errors: number; clear: number };
   toast: (msg: string, tone?: 'good' | 'warn' | 'info') => void;
 }

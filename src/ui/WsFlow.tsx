@@ -26,14 +26,14 @@ export function WsFlow() {
   const ax = axisUnit(end);
   if (!model.fpds.length) return <Empty><p>No product families (FPD) yet.</p><button className="btn-p mt-2" data-testid="add-fpd" onClick={addFpd}>+ Add Product Family (FPD)</button></Empty>;
   return <div className="grid gap-4">
-    <Card title="Flow summary" right={<><span className="text-xs">Uplift case</span><Seg label="Uplift case" value={filters.uplift} options={Object.keys(UPLIFTS)} onChange={(v) => setFilters({ uplift: v })} /></>}>
+    <Card title="Flow summary" source="Product Flow (FPD)" right={<><span className="text-xs">Uplift case</span><Seg label="Uplift case" value={filters.uplift} options={Object.keys(UPLIFTS)} onChange={(v) => setFilters({ uplift: v })} /></>}>
       <div className="flex flex-wrap gap-6 items-baseline">
         <div><div className="text-xs text-steel-500">Programme length</div><div className="text-2xl font-bold" data-testid="end-day">{n1(flow.endDay, 0)} days</div><div className="text-xs text-steel-500">≈ {n1(flow.endDay / ax.size, 1)} {ax.unit}</div></div>
         <div><div className="text-xs text-steel-500">Critical chain (multi-pass solver, {flow.passes} passes)</div><div className="text-lg font-bold text-bad" data-testid="critical-chain">{chainText(flow.chain)}</div></div>
         {flow.cycles.length > 0 && <div role="alert" className="text-bad font-semibold" data-testid="cycle-alert">⚠ Circular loop: {flow.cycles.map((c) => [...c, c[0]].join(' → ')).join('; ')}</div>}
       </div></Card>
 
-    <Card title="Product families (FPD)" term="FPD" right={<button className="btn-p" data-testid="add-fpd" onClick={addFpd}>+ Add Product Family (FPD)</button>}>
+    <Card title="Product families (FPD)" term="FPD" source="Product Flow (FPD)" right={<button className="btn-p" data-testid="add-fpd" onClick={addFpd}>+ Add Product Family (FPD)</button>}>
       {filters.factory !== 'All' && <p className="text-xs text-slate-500 mb-2">Showing every product family that passes through {filters.factory}, including those that also visit other factories.</p>}
       <div className="overflow-auto"><table className="w-full min-w-[1500px]"><thead><tr><Th>FPD ID</Th><Th>Name</Th><Th>Multi-cell &amp; factory route</Th><Th>Hours</Th><Th>Volume</Th><Th>Working h/day</Th><Th>Version</Th><Th>Date</Th><Th term="Process Lead Time">Lead time (d/unit)</Th>
         {Object.keys(UPLIFTS).map((k) => <Th key={k} term="Uplift Case">{k}</Th>)}<Th>Duration (d)</Th><Th term="Little's Law">WIP</Th><th className="th" /></tr></thead>
@@ -53,7 +53,7 @@ export function WsFlow() {
       {!sm.fpds.length && <p className="text-slate-500 py-2">No product families pass through this factory.</p>}
       <p className="text-xs text-slate-500 mt-2">Lead time = hours ÷ volume ÷ working hours per day. WIP = rate × lead time, with rate = volume ÷ (planned weeks × 5 days).</p></Card>
 
-    <Card title="Dependency Links" right={<button className="btn" onClick={() => edit((d) => d.links.push({ id: `L${Date.now().toString(36)}`, parent: '', child: '', rule: 'Complete', param: null, transferDays: 0, adjustTakts: 0 }))}>+ Add link</button>}>
+    <Card title="Dependency Links" source="Product Flow (FPD)" right={<button className="btn" onClick={() => edit((d) => d.links.push({ id: `L${Date.now().toString(36)}`, parent: '', child: '', rule: 'Complete', param: null, transferDays: 0, adjustTakts: 0 }))}>+ Add link</button>}>
       <table className="w-full"><thead><tr><Th>Parent FPD</Th><Th>Child FPD</Th><Th term="Start Rule">Start rule</Th><Th>N units / Overlap %</Th><Th term="Transfer Days">Transfer days</Th><Th term="Adjust in Takts">Adjust in takts</Th><Th>Start driver?</Th><th className="th" /></tr></thead>
         <tbody>{model.links.map((l, i) => <FocusRow key={l.id} match={focus?.kind === 'link' && focus.ref === l.id}>
           <td className="td w-32"><Sel label="Parent FPD" value={l.parent} options={ids} onChange={(v) => edit((d) => { d.links[i].parent = v; })} /></td>
@@ -66,16 +66,16 @@ export function WsFlow() {
           <td className="td"><button className="text-bad" aria-label="Delete link" onClick={() => edit((d) => { d.links.splice(i, 1); })}>🗑</button></td></FocusRow>)}</tbody></table>
       {checks.perRule.DC26 > 0 && <p className="text-bad mt-2 font-semibold">Circular loop detected: the loop links are ignored by the solver until you remove one.</p>}</Card>
 
-    <Card title="Gantt + Stacked WIP" right={<><button className="btn" onClick={() => setPlay(!play)} aria-pressed={play}>{play ? '⏸ Pause' : '▶ Play'}</button><button className="btn" onClick={() => { setCursor(0); setPlay(false); }}>Reset</button></>}>
+    <Card title="Gantt + Stacked WIP" source="Product Flow (FPD)" right={<><button className="btn" onClick={() => setPlay(!play)} aria-pressed={play}>{play ? '⏸ Pause' : '▶ Play'}</button><button className="btn" onClick={() => { setCursor(0); setPlay(false); }}>Reset</button></>}>
       <GanttWip flow={flow} cursor={Math.min(cursor, end)} onCursor={setCursor} names={names} />
       <div className="flex items-center gap-3 mt-1"><label className="text-xs">Time cursor</label><input aria-label="Time cursor" type="range" min={0} max={Math.round(end)} value={Math.round(Math.min(cursor, end))} onChange={(e) => setCursor(Number(e.target.value))} className="flex-1" /><span className="text-xs font-mono" data-testid="cursor-wip">day {Math.round(cursor)} · WIP {nowWip.toFixed(2)}</span></div>
       <p className="text-xs text-steel-500">Axis auto-scales ({ax.unit}). Red bars are the critical chain. Drag on the chart or use the slider.</p></Card>
 
     <div className="grid lg:grid-cols-2 gap-4">
-      <Card title="Flow Map"><FlowMap flow={flow} links={model.links} names={names} /></Card>
-      <Card title="Biggest Levers" right={<span className="text-xs">Days added to the end date by +10% on one FPD</span>}><VBars label="Biggest levers" data={levers.map((l) => ({ label: `${l.id} ${l.name.slice(0, 12)}`, value: l.deltaDays }))} unit=" d" color="#c2410c" /></Card>
+      <Card title="Flow Map" source="Product Flow (FPD)"><FlowMap flow={flow} links={model.links} names={names} /></Card>
+      <Card title="Biggest Levers" source="Product Flow (FPD)" right={<span className="text-xs">Days added to the end date by +10% on one FPD</span>}><VBars label="Biggest levers" data={levers.map((l) => ({ label: `${l.id} ${l.name.slice(0, 12)}`, value: l.deltaDays }))} unit=" d" color="#c2410c" /></Card>
     </div>
-    <Card title="Monte Carlo: end-date uncertainty" right={<span className="text-xs">{mc.runs} runs · triangular −5% / typical / +{Math.round(Math.max(up, 0.1) * 100)}% on every FPD</span>}>
+    <Card title="Monte Carlo: end-date uncertainty" source="Product Flow (FPD)" right={<span className="text-xs">{mc.runs} runs · triangular −5% / typical / +{Math.round(Math.max(up, 0.1) * 100)}% on every FPD</span>}>
       <Histogram values={mc.ends} p10={mc.p10} p50={mc.p50} p90={mc.p90} label="Monte Carlo end-date histogram" />
       <p className="text-sm" data-testid="mc-summary">80% of runs finish between day {Math.round(mc.p10)} and day {Math.round(mc.p90)} (median {Math.round(mc.p50)}).</p></Card>
   </div>;

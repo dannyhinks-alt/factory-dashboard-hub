@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { DICTIONARY } from '../engine/constants';
 import { RULES, runChecks } from '../engine/checks';
 import { factoriesOf, cells as calcCells } from '../engine/calc';
-import { readiness, scopeChecks, statusReason } from '../engine/overview';
+import { readiness, scopeChecks, statusBasis, statusReason } from '../engine/overview';
 import { verdictOf } from '../engine/story';
 import { impactMessage } from '../engine/toast';
 import { emptyModel } from '../engine/blank';
@@ -144,7 +144,7 @@ export function App() {
 
   const goTo = useCallback((t: FocusTarget) => { setWs(t.ws); setFocus({ ...t }); setTimeout(() => setFocus((f) => (f === null || f.ref !== t.ref ? f : null)), 6000); }, []);
   const scopeCells = useMemo(() => (model ? calcCells(model, 'model').filter((c) => filters.factory === 'All' || c.factory === filters.factory) : []), [model, filters.factory]);
-  const status = useMemo(() => { const v = verdictOf(scopeCells, checks?.counts.ERROR ?? 0); return { verdict: v, reason: statusReason(v, scopeCells, checks?.counts.ERROR ?? 0, filters.factory) }; }, [scopeCells, checks, filters.factory]);
+  const status = useMemo(() => { const v = verdictOf(scopeCells, checks?.counts.ERROR ?? 0); return { verdict: v, reason: statusReason(v, scopeCells, checks?.counts.ERROR ?? 0, filters.factory), basis: model ? statusBasis(model, filters.factory) : '' }; }, [model, scopeCells, checks, filters.factory]);
   const ready = useMemo(() => (checks ? readiness(checks) : { pct: 0, errors: 0, clear: 0 }), [checks]);
   const ctx = useMemo(() => model && checks ? { model, edit, checks, filters, setFilters: (p: Partial<ScopeFilters>) => setF((f) => ({ ...f, ...p })), focus, goTo, help, asOf, status, ready, toast } : null, [model, edit, checks, filters, focus, goTo, help, asOf, status, ready, toast]);
 
@@ -174,7 +174,7 @@ export function App() {
       </header>
       {model && <div className="px-4 pb-2 flex flex-wrap items-center gap-3 text-white" data-testid="command-bar">
         <div data-testid="factory-filter"><Seg label="Global factory filter" value={filters.factory} options={['All', ...factoriesOf(model)]} onChange={(v) => setF((f) => ({ ...f, factory: v }))} /></div>
-        <span data-testid="status-pill" data-verdict={status.verdict} className="px-3 py-1 rounded font-bold text-[13px]" style={{ background: VC[status.verdict] }}>Overall: {status.verdict} — {status.reason}</span>
+        <span data-testid="status-pill" data-verdict={status.verdict} className="px-3 py-1 rounded font-bold text-[13px]" style={{ background: VC[status.verdict] }}>Overall: {status.verdict} — {status.reason} <span className="font-normal opacity-90" data-testid="status-basis">· Basis: {status.basis}</span></span>
         <span className="flex items-center gap-2 text-xs" data-testid="readiness" title="Share of the 34 Data Checks with no ERROR or WARN flag">
           <span>Data readiness</span><span className="inline-block w-32 h-2.5 rounded bg-slate-600 overflow-hidden"><span className="block h-full" style={{ width: `${ready.pct}%`, background: ready.errors ? '#D97706' : '#059669' }} /></span>
           <b data-testid="readiness-pct">{ready.pct}% complete</b><span className={ready.errors ? 'text-rose-300 font-semibold' : 'text-emerald-300'} data-testid="readiness-errors">{ready.errors} critical error{ready.errors === 1 ? '' : 's'} left</span></span>
