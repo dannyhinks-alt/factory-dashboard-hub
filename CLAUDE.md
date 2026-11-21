@@ -89,6 +89,27 @@ Assumed label for Complex: `'Wizard default (Complex — 50% limit)'`.
 | 3 | Product Flow (FPD) |
 | 4 | Gate & Passport Status |
 | 5 | Scenarios & Register |
+| 6 | Asset Cost & Uncertainty |
+
+### Wizard complexity override (`src/ui/AutoFillWizard.tsx`)
+
+- When Complexity rule is on and `className === 'Complex'`, Step 2 shows a checkbox: `Override existing 'Standard (65%)' cells to 'Complex (50%)' (tracked as Assumed)`.
+- Controlled by `rules.complexity.overrideStandard?: boolean` on `WizardRules`.
+- `applyWizard` applies override logic: when `overrideStandard` is true and `className === 'Complex'`, all in-scope assets currently set to `'Standard'` are also set to `'Complex'` with `assumedFields` label `'Wizard default (Complex — 50% limit)'`.
+
+### Asset Cost & Uncertainty tab (`src/ui/WsCost.tsx`)
+
+- Tab 6 — hierarchical Factory → Cell → Asset cost entry table.
+- Asset Metadata columns: Cell, Asset Name, Source (Passport / Model), Current Qty, Add'l Qty Needed (from `machinesToAdd(calcAsset(model, a, 'model'))`).
+- Cost input columns: Unit Asset Cost (£) → `a.costPerMachine`, Install / Civils / Tooling (£) → `a.installCostPerMachine`.
+- Computed columns: Base Total (£) = Qty × (Unit + Install), Expansion CapEx (£) = Add'l Qty × (Unit + Install).
+- Uncertainty selector: `Low ±10%` / `Medium ±25%` / `High ±40%` / `Custom ±%` → `a.costUncPct`.
+- Low / Most Likely / High estimates derived from Base Total × (1 ∓ uncPct).
+- Cost Basis / Assumption Note → `a.costNote`.
+- Cell subtotals and Factory totals rolled up inline.
+- Estate KPI strip at top: Base CapEx, Range (Low – High), Risk Contingency (High − Base), Expansion CapEx.
+- DC31 and DC32 (cost data checks) removed from `checks.ts` and `gaps.ts` — cost is managed exclusively in tab 6.
+- New Asset fields: `installCostPerMachine: number | null`, `costNote: string`.
 
 ### Gate & Passport Status tab (`src/ui/WsGatePassport.tsx`)
 
@@ -102,7 +123,7 @@ Assumed label for Complex: `'Wizard default (Complex — 50% limit)'`.
 
 ### Cell Summary Strip (WsData.tsx)
 
-Each cell summary row is rendered as a **tinted group banner** (`background: #f1f5f9; border-left: 3px solid #2563eb`) spanning all asset columns (`colSpan={21}`). The Cell Summary Strip (VA h, ENVA h, NVA h, Inspection h, Extra footprint, Ops h, Lean h, Footprint) is an independent inline section within that banner — never placed inside asset-level columns.
+Each cell summary row is rendered as a **tinted group banner** (`background: #f1f5f9; border-left: 3px solid #2563eb`) spanning all asset columns (`colSpan={18}`). The Cell Summary Strip (VA h, ENVA h, NVA h, Inspection h, Extra footprint, Ops h, Lean h, Footprint) is an independent inline section within that banner — never placed inside asset-level columns.
 
 ### UtilBars (`src/ui/charts.tsx`)
 

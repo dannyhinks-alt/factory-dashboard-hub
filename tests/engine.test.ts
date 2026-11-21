@@ -12,11 +12,11 @@ import { pressureList } from '../src/engine/sensitivity';
 
 describe('engine', () => {
   const m = demoModel();
-  it('has exactly 34 data check rules', () => { expect(RULES.length).toBe(34); expect(new Set(RULES.map((r) => r.id)).size).toBe(34); });
+  it('has exactly 32 data check rules', () => { expect(RULES.length).toBe(32); expect(new Set(RULES.map((r) => r.id)).size).toBe(32); });
   it('rules match the Start-sheet list 1-for-1 (id, severity, order)', () => {
-    const sev = 'EEEEIEEEWWWWIWWWWWWEWIIWWEWWWWWWIIW'.replace(/(.{4})(.*)/, '$1$2');
-    const want = 'E E E E I E E E W W W W I W W W W W W E W I I W W E W W W W W I I W'.split(' ').map((c) => ({ E: 'ERROR', W: 'WARN', I: 'INFO' } as Record<string, string>)[c]);
-    expect(want.length).toBe(34); void sev;
+    const sev = 'EEEEIEEEWWWWIWWWWWWEWIIWWEWWWWWIW'.replace(/(.{4})(.*)/, '$1$2');
+    const want = 'E E E E I E E E W W W W I W W W W W W E W I I W W E W W W W I W'.split(' ').map((c) => ({ E: 'ERROR', W: 'WARN', I: 'INFO' } as Record<string, string>)[c]);
+    expect(want.length).toBe(32); void sev;
     expect(RULES.map((r) => r.severity)).toEqual(want); RULES.forEach((r, i) => expect(r.id).toBe(`DC${String(i + 1).padStart(2, '0')}`));
   });
   it('each rule fires on a crafted bad model', () => {

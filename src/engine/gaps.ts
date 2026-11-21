@@ -66,7 +66,7 @@ export function cellAssetRows(m: Model, issues: Issue[]): Row[] {
   const by = new Map<string, Issue[]>(); issues.forEach((i) => { if (i.target && (i.target.kind === 'asset' || i.target.kind === 'cellline')) by.set(`${i.target.kind}:${i.target.ref}`, [...(by.get(`${i.target.kind}:${i.target.ref}`) ?? []), i]); });
   const rows: Row[] = [];
   m.cellLines.forEach((c) => { const xs = by.get(`cellline:${c.id}`); if (xs) rows.push(cellRow(m, c, xs)); });
-  m.assets.forEach((a) => { const xs = by.get(`asset:${a.id}`); if (xs || assumedOf(m, a).length) rows.push(assetRow(m, a, xs ?? [])); });
+  m.assets.forEach((a) => { const xs = by.get(`asset:${a.id}`); const row = assetRow(m, a, xs ?? []); if (xs || assumedOf(m, a).length || row.amber.size > 0) rows.push(row); });
   return rows.sort((a, b) => a.factory.localeCompare(b.factory) || a.cellId.localeCompare(b.cellId) || (a.asset === '' ? -1 : b.asset === '' ? 1 : a.asset.localeCompare(b.asset)));
 }
 

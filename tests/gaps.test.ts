@@ -64,7 +64,7 @@ describe('Import Filled Gaps (.xlsx)', () => {
     const proj = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(proj, XLSX.utils.aoa_to_sheet([['Factory']]), 'Data'); XLSX.utils.book_append_sheet(proj, XLSX.utils.aoa_to_sheet([['x']]), SHEET_CELLS); expect(looksLikeGapWorkbook(proj)).toBe(false);
   });
   it('patches filled cells, recalculates, and resolves flags without touching other data', async () => {
-    const m = m0(); const before = runChecks(m, '2026-01-01').counts; const snapshot = JSON.stringify(m.assets.map((a) => [a.id, a.loadHrs, a.machines]));
+    const m = m0(); m.assets[8].oee = null; m.assets[8].modelOee = null; const before = runChecks(m, '2026-01-01').counts; const snapshot = JSON.stringify(m.assets.map((a) => [a.id, a.loadHrs, a.machines]));
     const wb = await fill(m, (x) => { const ws = x.getWorksheet(SHEET_CELLS)!; ws.eachRow((r, n) => { if (n > 1 && r.getCell(4).value === 'CMM Inspection') { r.getCell(colOf('Actual Load (hrs/yr)')).value = 1234; r.getCell(colOf('OEE (%)')).value = 71; } if (n > 1 && !r.getCell(4).value && r.getCell(2).value === '07_DPF_MACHN') r.getCell(colOf('Demand (units/yr)')).value = 400; if (n > 1 && !r.getCell(4).value && r.getCell(2).value === '04_DPF_WELDG') r.getCell(colOf('Passport Date')).value = '2026-01-10'; }); });
     const d = structuredClone(m); const rep = applyFilledGaps(d, wb); const cmm = d.assets.find((a) => a.asset === 'CMM Inspection')!;
     expect(cmm.loadHrs).toBe(1234); expect(cmm.modelLoad).toBe(1234); expect(cmm.oee).toBeCloseTo(0.71); expect(cmm.modelOee).toBeCloseTo(0.71);
@@ -79,12 +79,12 @@ describe('Import Filled Gaps (.xlsx)', () => {
     const wb2 = await fill(m, (x) => { x.getWorksheet(SHEET_CELLS)!.eachRow((r, n) => { if (n > 1) r.getCell(colOf('Machines')).value = null; }); }); const d2 = structuredClone(m); applyFilledGaps(d2, wb2); expect(JSON.stringify(d2.assets.map((a) => a.machines))).toBe(JSON.stringify(m.assets.map((a) => a.machines)));
   });
   it('matches by Factory + Cell ID + Asset, falling back to Cell ID + Asset, and reports unmatched rows', async () => {
-    const m = m0(); const wb = await fill(m, (x) => { const ws = x.getWorksheet(SHEET_CELLS)!; ws.eachRow((r, n) => { if (n > 1 && r.getCell(4).value === 'CMM Inspection') { r.getCell(1).value = 'WRONG'; r.getCell(colOf('Actual Load (hrs/yr)')).value = 999; } });
+    const m = m0(); m.assets[8].oee = null; m.assets[8].modelOee = null; const wb = await fill(m, (x) => { const ws = x.getWorksheet(SHEET_CELLS)!; ws.eachRow((r, n) => { if (n > 1 && r.getCell(4).value === 'CMM Inspection') { r.getCell(1).value = 'WRONG'; r.getCell(colOf('Actual Load (hrs/yr)')).value = 999; } });
       const nr = ws.addRow([]); nr.getCell(1).value = 'HT'; nr.getCell(2).value = 'NO_SUCH_CELL'; nr.getCell(4).value = 'Ghost'; nr.getCell(colOf('Machines')).value = 3; });
     const d = structuredClone(m); const rep = applyFilledGaps(d, wb); expect(d.assets.find((a) => a.asset === 'CMM Inspection')!.loadHrs).toBe(999); expect(rep.unmatched.length).toBe(1); expect(rep.unmatched[0]).toContain('Ghost');
   });
   it('accepts OEE as 68 or 0.68 and applies shift and complexity dropdown values', async () => {
-    const m = m0(); m.assets[2].shift = ''; m.assets[2].modelShift = '';
+    const m = m0(); m.assets[8].oee = null; m.assets[8].modelOee = null; m.assets[2].shift = ''; m.assets[2].modelShift = '';
     const wb = await fill(m, (x) => { x.getWorksheet(SHEET_CELLS)!.eachRow((r, n) => { if (n > 1 && r.getCell(4).value === 'Temper Oven') { r.getCell(colOf('Shift Pattern')).value = '4 Shifts'; r.getCell(colOf('OEE (%)')).value = 0.68; } if (n > 1 && r.getCell(4).value === 'CMM Inspection') r.getCell(colOf('OEE (%)')).value = 68; }); });
     const d = structuredClone(m); applyFilledGaps(d, wb); const t = d.assets.find((a) => a.asset === 'Temper Oven')!; expect(t.shift).toBe('4 Shifts'); expect(t.oee).toBeCloseTo(0.68); expect(d.assets.find((a) => a.asset === 'CMM Inspection')!.oee).toBeCloseTo(0.68);
   });

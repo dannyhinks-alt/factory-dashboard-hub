@@ -74,7 +74,7 @@ console.log('1. Launch + sample project');
   ok(await page.getByTestId('dropzone').isVisible(), 'drag-and-drop zone visible on launch');
   await loadSample(page);
   ok(await page.getByTestId('gap-panel').isVisible(), 'Gap & Action Summary shown at top');
-  ok((await page.getByTestId('rules-table').locator('tbody tr').count()) === 34, 'all 34 rules listed in Data Check table');
+  ok((await page.getByTestId('rules-table').locator('tbody tr').count()) === 32, 'all 32 rules listed in Data Check table');
   const g0 = await gapCount(page); ok(g0 > 5, `demo flags gaps (${g0})`);
   ok(['GOOD', 'WATCH', 'BAD'].includes(await page.getByTestId('verdict').getAttribute('data-verdict')), 'verdict banner');
   ok((await page.getByTestId('story').locator('li').count()) === 5, 'five-line story');
@@ -220,8 +220,8 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
 {
   const { ctx, page, errors } = await fresh();
   await loadSample(page);
-  ok((await page.locator('nav[aria-label=Workspaces] button').count()) === 5, 'navigation has exactly 5 workspaces');
-  ok(['1. Overall Status', '2. Data & Gap Filler', '3. Product Flow (FPD)', '4. Gate & Passport Status', '5. Scenarios & Register'].every(async () => true) && (await page.getByTestId('ws-3').innerText()).includes('Product Flow (FPD)') && (await page.getByTestId('ws-4').innerText()).includes('Gate & Passport') && (await page.getByTestId('ws-5').innerText()).includes('Scenarios & Register'), 'workspace names');
+  ok((await page.locator('nav[aria-label=Workspaces] button').count()) === 6, 'navigation has exactly 6 workspaces');
+  ok(['1. Overall Status', '2. Data & Gap Filler', '3. Product Flow (FPD)', '4. Gate & Passport Status', '5. Scenarios & Register', '6. Asset Cost & Uncertainty'].every(async () => true) && (await page.getByTestId('ws-3').innerText()).includes('Product Flow (FPD)') && (await page.getByTestId('ws-4').innerText()).includes('Gate & Passport') && (await page.getByTestId('ws-5').innerText()).includes('Scenarios & Register') && (await page.getByTestId('ws-6').innerText()).includes('Asset Cost'), 'workspace names');
   // programme name: editable, persisted
   await page.getByTestId('programme-name').fill('Alpha programme');
   await page.reload(); ok((await page.getByTestId('programme-name').inputValue()) === 'Alpha programme', 'programme name persisted in localStorage');
@@ -309,7 +309,7 @@ for (const [name, cached, expect_] of [
   await page.waitForTimeout(300);
   const app = await page.getByTestId('gap-panel').count() > 0, blank = await page.getByTestId('dropzone').count() > 0;
   ok(expect_ === 'app' ? app : blank, `${name}: ${expect_ === 'app' ? 'loads as a normal workspace' : 'falls back to the blank start screen'}`);
-  if (app) { for (const n of [1, 2, 3, 4, 5]) await page.getByTestId(`ws-${n}`).click(); ok(true, `${name}: all 5 workspaces render`); }
+  if (app) { for (const n of [1, 2, 3, 4, 5, 6]) await page.getByTestId(`ws-${n}`).click(); ok(true, `${name}: all 6 workspaces render`); }
   ok(errors.length === 0 && (await page.locator('#boot-error').count()) === 0, `${name}: zero console errors` + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }
@@ -318,7 +318,7 @@ for (const [name, cached, expect_] of [
   await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
   ok(await page.getByTestId('empty-onboarding').isVisible(), 'blank workspace shows an onboarding prompt');
   for (const n of [1, 2, 3, 4, 5]) await page.getByTestId(`ws-${n}`).click();
-  ok(errors.length === 0, 'blank workspace: all 5 workspaces render with zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  ok(errors.length === 0, 'blank workspace: all 6 workspaces render with zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }
 

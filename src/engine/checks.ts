@@ -6,7 +6,7 @@ import { PLAIN } from './plainEnglish';
 import type { Asset, CellLine, FocusTarget, Issue, Model, Severity } from './types';
 
 void _unused;
-/** The 34 Data Check rules, numbered exactly as on the workbook's Start sheet (DC01 = rule 1 … DC34 = rule 34). */
+/** The 32 Data Check rules, numbered exactly as on the workbook's Start sheet (DC01 = rule 1 … DC32 = rule 32). */
 export interface RuleDef { id: string; severity: Severity; title: string; plain: string; help: string; where: string; run: (m: Model, asOf: string) => Issue[] }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -79,8 +79,8 @@ export const RULES: RuleDef[] = [
   R('DC28', 'WARN', 'Inspection typed on an asset line: ignored, must be on the cell line', 'Data', assetsWhere('DC28', 'WARN', (_, a) => (a.inspectionHrs !== null ? 'inspection typed on an asset line is ignored: put it on the cell line' : null))),
   R('DC29', 'WARN', 'Cells whose inspection is larger than the operations or lean hours it sits inside, or has nothing to compare with', 'Data', linesWhere('DC29', 'WARN', (_, c) => (c.inspectionHrs === null ? null : c.opsHrs === null && c.leanHrs === null ? 'inspection has no operations or lean hours to compare with' : (c.opsHrs !== null && c.inspectionHrs > c.opsHrs) || (c.leanHrs !== null && c.inspectionHrs > c.leanHrs) ? 'inspection is larger than the operations or lean hours it sits inside' : null))),
   R('DC30', 'WARN', "Planned losses at or above 99% of an asset's scheduled hours: capped", 'Data', assetsWhere('DC30', 'WARN', (m, a) => { const w = weeksFor(m, a.factory), h = shiftHoursFor(m, a.shift); const sched = w !== null && h !== null && a.machines !== null ? w * h * a.machines : 0; return a.plannedLosses !== null && sched > 0 && a.plannedLosses / sched >= 0.99 ? `planned losses are ${((a.plannedLosses / sched) * 100).toFixed(0)}% of working hours, so they are capped at 99%` : null; })),
-  R('DC33', 'INFO', 'Cells with a footprint but no allocated space: cannot be checked', 'Settings', linesWhere('DC33', 'INFO', (_, c) => (c.footprint !== null && c.allocatedSpace === null ? 'has a footprint but no allocated space, so it cannot be checked' : null))),
-  R('DC34', 'WARN', 'Cells whose footprint is over their allocated space', 'Settings, Data', linesWhere('DC34', 'WARN', (_, c) => (c.footprint !== null && c.allocatedSpace !== null && c.footprint > c.allocatedSpace ? `footprint ${c.footprint} m² is over the allocated ${c.allocatedSpace} m²` : null))),
+  R('DC31', 'INFO', 'Cells with a footprint but no allocated space: cannot be checked', 'Settings', linesWhere('DC31', 'INFO', (_, c) => (c.footprint !== null && c.allocatedSpace === null ? 'has a footprint but no allocated space, so it cannot be checked' : null))),
+  R('DC32', 'WARN', 'Cells whose footprint is over their allocated space', 'Settings, Data', linesWhere('DC32', 'WARN', (_, c) => (c.footprint !== null && c.allocatedSpace !== null && c.footprint > c.allocatedSpace ? `footprint ${c.footprint} m² is over the allocated ${c.allocatedSpace} m²` : null))),
 ];
 
 export interface CheckResult { issues: Issue[]; counts: Record<Severity, number>; perRule: Record<string, number>; empty: boolean }

@@ -110,8 +110,7 @@ export function WsData() {
           {([['passportOee', 'Passport OEE', true], ['passportPlannedLosses', 'Passport planned losses', false], ['passportLoadHrs', 'Passport load', false], ['operationQty', 'Operation quantity', false]] as const).map(([k, l, p]) =>
             <td key={k} className="td w-20 bg-slate-50"><NumInput pct={p} gap={k === 'passportOee' || k === 'passportLoadHrs'} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
           <td className="td font-mono bg-slate-50">{pct(a.passportUtilisation ?? calcAsset(model, a, 'passport').effUtil)}</td>
-          {([['costPerMachine', 'Cost', false], ['spacePerMachine', 'Space', false], ['costUncPct', 'Cost uncertainty', true], ['inspectionHrs', 'Inspection', false]] as const).map(([k, l, p]) =>
-            <td key={k} className="td w-20"><NumInput pct={p} label={`${l} of ${a.asset}`} value={a[k]} onChange={(v) => upd(a.id, (x) => { x[k] = v; })} /></td>)}
+          <td className="td w-20"><NumInput label={`Inspection of ${a.asset}`} value={a.inspectionHrs} onChange={(v) => upd(a.id, (x) => { x.inspectionHrs = v; })} /></td>
           <td className="td whitespace-nowrap font-mono">{pct(c.headroom)} <BandChip band={band(c.headroom)} /></td>
           <td className="td"><button className="text-rose-600" aria-label={`Delete ${a.asset}`} onClick={() => edit((d) => { d.assets = d.assets.filter((x) => x.id !== a.id); })}>🗑</button></td></FocusRow>; })}
         </Fragment>)}</tbody></table>

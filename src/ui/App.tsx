@@ -29,10 +29,11 @@ import { WsFlow } from './WsFlow';
 import { WsSensitivity } from './WsSensitivity';
 import { SelfTestDrawer, WsGovernance } from './WsGovernance';
 import { WsGatePassport } from './WsGatePassport';
+import { WsCost } from './WsCost';
 import { WsCompare } from './WsCompare';
 import { PrintSummary } from './PrintSummary';
 
-const WS = ['Overall Status', 'Data & Gap Filler', 'Product Flow (FPD)', 'Gate & Passport Status', 'Scenarios & Register'];
+const WS = ['Overall Status', 'Data & Gap Filler', 'Product Flow (FPD)', 'Gate & Passport Status', 'Scenarios & Register', 'Asset Cost & Uncertainty'];
 const SEV_COL: Record<Severity, string> = { ERROR: '#c0392b', WARN: '#c98a00', INFO: '#0b5cab' };
 const SESSION_KEY = 'factory-hub.session.v1';
 const DEFAULT_FILTERS: ScopeFilters = { factory: 'All', topN: 10, source: 'Both', board: 'All', sort: 'Worst first', show: 'Headroom', uplift: 'Typical' };
@@ -274,7 +275,7 @@ export function App() {
           </nav>
         </div>
         <main className="flex-1 p-4 no-print" data-testid={`workspace-${ws}`}>
-          {ws === 1 && <><WsDashboard /><div className="mt-4"><WsCompare /></div></>}{ws === 2 && <WsData />}{ws === 3 && <WsFlow />}{ws === 4 && <WsGatePassport />}{ws === 5 && <><WsGovernance /><div className="mt-4"><WsSensitivity /></div><div className="mt-4"><SelfTestDrawer /></div></>}
+          {ws === 1 && <><WsDashboard /><div className="mt-4"><WsCompare /></div></>}{ws === 2 && <WsData />}{ws === 3 && <WsFlow />}{ws === 4 && <WsGatePassport />}{ws === 5 && <><WsGovernance /><div className="mt-4"><WsSensitivity /></div><div className="mt-4"><SelfTestDrawer /></div></>}{ws === 6 && <WsCost />}
         </main>
         <div aria-live="polite" className="no-print fixed bottom-4 right-4 z-50 flex flex-col gap-2" data-testid="toasts">
           {toasts.map((t) => <div key={t.id} role="status" className="rounded shadow-lg px-4 py-2 text-white text-[13px] max-w-sm" style={{ background: t.tone === 'good' ? '#047857' : t.tone === 'warn' ? '#B45309' : '#1E293B' }}>{t.msg}</div>)}</div>

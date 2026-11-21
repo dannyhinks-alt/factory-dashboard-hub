@@ -51,9 +51,9 @@ export function runSelfTest(m: Model): TestResult[] {
     out.push(mk(6, 'Multi-pass lead-time cascade equals topological solve', e, n, a.cycles.length ? ' (loop present: cascade skipped)' : '')); }
   // 7 data checks
   { const e: number[] = []; let n = RULES.length; const r = runChecks(m);
-    if (RULES.length !== 34) e.push(1); if (new Set(RULES.map((x) => x.id)).size !== 34) e.push(1);
+    if (RULES.length !== 32) e.push(1); if (new Set(RULES.map((x) => x.id)).size !== 32) e.push(1);
     const sum = Object.values(r.perRule).reduce((x, y) => x + y, 0); if (sum !== r.issues.length || r.counts.ERROR + r.counts.WARN + r.counts.INFO !== r.issues.length) e.push(1);
-    out.push(mk(7, 'All 34 Data Check rules defined and consistent', e, n, `; ${r.issues.length} flag(s) raised`)); }
+    out.push(mk(7, 'All 32 Data Check rules defined and consistent', e, n, `; ${r.issues.length} flag(s) raised`)); }
   // 8 break-even
   { const e: number[] = []; let n = 0;
     for (const p of pressureList(m)) { const a = p.c.asset;
