@@ -18,16 +18,16 @@ describe('Gap Auto-Fill Wizard', () => {
     const s = scanGaps(blanky(), ALL); expect(s.factories).toEqual(['HT']); expect(s.shiftAssets.length).toBe(2); expect(s.complexityAssets.length).toBe(1); expect(s.oeeAssets.length).toBe(1);
     const dpf = scanGaps(blanky(), { factory: 'DPF' }); expect(dpf.factories).toEqual([]); expect(dpf.shiftAssets.length).toBe(1);
   });
-  it('defaults: 48 weeks, 2 Shifts, Standard ticked; baseline OEE 85% off', () => { expect(DEFAULT_RULES).toEqual({ plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Standard' }, oee: { on: false, fraction: 0.85 } }); });
+  it('defaults: 48 weeks, 2 Shifts, Standard ticked; Global OEE 70% ticked', () => { expect(DEFAULT_RULES).toEqual({ plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Standard' }, oee: { on: true, fraction: 0.70 } }); });
   it('fills only ticked rules, only blanks, and records provenance with labels', () => {
     const m = blanky(); const before = structuredClone(m); const rep = applyWizard(m, ALL, DEFAULT_RULES);
-    expect(rep).toMatchObject({ plannedWeeks: 1, shift: 2, complexity: 1, oee: 0, total: 4 });
+    expect(rep).toMatchObject({ plannedWeeks: 1, shift: 2, complexity: 1, oee: 1, total: 5 });
     expect(m.settings.plannedWeeks.HT).toBe(48); expect(m.settings.plannedWeeks.DPF).toBe(46); expect(m.assets[0].shift).toBe('2 Shifts'); expect(m.assets[0].modelShift).toBe('2 Shifts'); expect(m.assets[1].complexity).toBe('Standard');
-    expect(m.assets[2].oee).toBeNull(); expect(m.assets[4].shift).toBe(before.assets[4].shift); // typed values are never overwritten
-    expect(m.assumedFields).toEqual({ [factoryKey('HT')]: 'Wizard default (48 wks)', [assetKey(m.assets[0].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[3].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[1].id, 'complexity')]: 'Wizard default (Standard)' });
+    expect(m.assets[2].oee).toBe(0.70); expect(m.assets[2].modelOee).toBe(0.70); expect(m.assets[4].shift).toBe(before.assets[4].shift); // typed values are never overwritten
+    expect(m.assumedFields).toEqual({ [factoryKey('HT')]: 'Wizard default (48 wks)', [assetKey(m.assets[0].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[3].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[1].id, 'complexity')]: 'Wizard default (Standard)', [assetKey(m.assets[2].id, 'oee')]: 'Wizard default (70% OEE)' });
   });
-  it('optional baseline OEE fills blank OEE and is labelled', () => { const m = blanky(); applyWizard(m, ALL, { ...DEFAULT_RULES, oee: { on: true, fraction: 0.85 } }); expect(m.assets[2].oee).toBe(0.85); expect(m.assets[2].modelOee).toBe(0.85); expect(m.assumedFields[assetKey(m.assets[2].id, 'oee')]).toBe('Wizard default (85% OEE)'); });
-  it('is idempotent: a second run fills nothing', () => { const m = blanky(); applyWizard(m, ALL, DEFAULT_RULES); expect(applyWizard(m, ALL, DEFAULT_RULES).total).toBe(0); });
+  it('OEE fills blank OEE at the configured fraction and is labelled', () => { const m = blanky(); applyWizard(m, ALL, { ...DEFAULT_RULES, oee: { on: true, fraction: 0.85 } }); expect(m.assets[2].oee).toBe(0.85); expect(m.assets[2].modelOee).toBe(0.85); expect(m.assumedFields[assetKey(m.assets[2].id, 'oee')]).toBe('Wizard default (85% OEE)'); });
+  it('is idempotent: a second run fills nothing (all 5 fields already filled)', () => { const m = blanky(); applyWizard(m, ALL, DEFAULT_RULES); expect(applyWizard(m, ALL, DEFAULT_RULES).total).toBe(0); });
   it('respects the factory scope and unticked rules', () => {
     const m = blanky(); applyWizard(m, { factory: 'DPF' }, { ...DEFAULT_RULES, shift: { on: false, pattern: '2 Shifts' } }); expect(m.assets[0].shift).toBe(''); expect(m.settings.plannedWeeks.HT).toBeNull(); expect(Object.keys(m.assumedFields)).toEqual([]);
   });
@@ -43,18 +43,18 @@ describe('assumed provenance', () => {
   const filled = () => { const m = blanky(); applyWizard(m, ALL, DEFAULT_RULES); return m; };
   it('a manual edit or imported real value clears the assumption; untouched ones stay', () => {
     const before = filled(); const after = structuredClone(before); after.assets[0].shift = '3 Shifts'; after.settings.plannedWeeks.HT = 50; pruneAssumed(before, after);
-    expect(after.assumedFields[assetKey(after.assets[0].id, 'shift')]).toBeUndefined(); expect(after.assumedFields[factoryKey('HT')]).toBeUndefined(); expect(after.assumedFields[assetKey(after.assets[3].id, 'shift')]).toBeDefined(); expect(Object.keys(after.assumedFields).length).toBe(2);
+    expect(after.assumedFields[assetKey(after.assets[0].id, 'shift')]).toBeUndefined(); expect(after.assumedFields[factoryKey('HT')]).toBeUndefined(); expect(after.assumedFields[assetKey(after.assets[3].id, 'shift')]).toBeDefined(); expect(Object.keys(after.assumedFields).length).toBe(3);
   });
   it('wizard keys added in the same edit are not pruned; deleted rows are dropped', () => {
-    const before = blanky(); const after = structuredClone(before); applyWizard(after, ALL, DEFAULT_RULES); pruneAssumed(before, after); expect(Object.keys(after.assumedFields).length).toBe(4);
+    const before = blanky(); const after = structuredClone(before); applyWizard(after, ALL, DEFAULT_RULES); pruneAssumed(before, after); expect(Object.keys(after.assumedFields).length).toBe(5);
     const b2 = filled(); const a2 = structuredClone(b2); a2.assets = a2.assets.filter((a) => a.id !== b2.assets[0].id); pruneAssumed(b2, a2); expect(a2.assumedFields[assetKey(b2.assets[0].id, 'shift')]).toBeUndefined();
   });
   it('field values are readable by key, and verify (key removal) keeps the value', () => { const m = filled(); expect(fieldValue(m, factoryKey('HT'))).toBe(48); expect(fieldValue(m, assetKey(m.assets[0].id, 'shift'))).toBe('2 Shifts'); expect(fieldValue(m, 'asset:NOPE:shift')).toBeUndefined(); delete m.assumedFields[assetKey(m.assets[0].id, 'shift')]; expect(m.assets[0].shift).toBe('2 Shifts'); });
   it('Revert Unverified Defaults restores blanks only for still-assumed fields', () => {
     const m = filled(); delete m.assumedFields[assetKey(m.assets[0].id, 'shift')]; const n = revertUnverified(m);
-    expect(n).toBe(3); expect(m.assets[0].shift).toBe('2 Shifts'); expect(m.assets[3].shift).toBe(''); expect(m.assets[1].complexity).toBe(''); expect(m.settings.plannedWeeks.HT).toBeNull(); expect(m.assumedFields).toEqual({}); expect(assumedCount(m)).toBe(0);
+    expect(n).toBe(4); expect(m.assets[0].shift).toBe('2 Shifts'); expect(m.assets[3].shift).toBe(''); expect(m.assets[1].complexity).toBe(''); expect(m.assets[2].oee).toBeNull(); expect(m.settings.plannedWeeks.HT).toBeNull(); expect(m.assumedFields).toEqual({}); expect(assumedCount(m)).toBe(0);
   });
-  it('counts per factory scope', () => { const m = filled(); expect(assumedCount(m)).toBe(4); expect(assumedCount(m, { factory: 'HT' })).toBe(3); expect(assumedCount(m, { factory: 'DPF' })).toBe(1); });
+  it('counts per factory scope', () => { const m = filled(); expect(assumedCount(m)).toBe(5); expect(assumedCount(m, { factory: 'HT' })).toBe(4); expect(assumedCount(m, { factory: 'DPF' })).toBe(1); });
   it('persists through the browser cache, .json auto-save, the embedded .html state and normalisation', () => {
     const m = filled(); const keys = Object.keys(m.assumedFields).sort();
     expect(Object.keys(readCachedSession(serialise(m))!.assumedFields).sort()).toEqual(keys); expect(Object.keys(deserialise(serialise(m)).assumedFields).sort()).toEqual(keys);

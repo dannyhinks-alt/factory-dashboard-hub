@@ -52,9 +52,11 @@ export function assetRow(m: Model, a: Asset, xs: Issue[]): Row {
   return { factory: a.factory, cellId: a.cell, cellName: cl?.note || '', asset: a.asset, sev: xs.length ? worst(xs) : 'WARN', missing: [...headlines(xs), ...assumed.map((x) => `${ASSUMPTION_NOTE}: ${x.col} (${x.label})`)], amber,
     vals: { 'Shift Pattern': a.shift, Complexity: a.complexity, Machines: a.machines ?? '', 'OEE (%)': a.oee === null ? '' : Math.round(a.oee * 10000) / 100, 'Actual Load (hrs/yr)': a.loadHrs ?? '', 'Planned Losses (hrs/yr)': a.plannedLosses ?? '', 'Demand (units/yr)': a.demand ?? '', 'CapEx (£)': a.costPerMachine ?? '', 'Footprint (m²)': a.spacePerMachine ?? '' } };
 }
-export function cellRow(c: CellLine, xs: Issue[]): Row {
+export function cellRow(m: Model, c: CellLine, xs: Issue[]): Row {
   const amber = new Set<Col>(); xs.forEach((i) => CELL_FIELDS[i.rule]?.forEach((f) => amber.add(f)));
-  if (c.demandUnits === null) amber.add('Demand (units/yr)'); if (c.passport && !c.version) amber.add('Passport Version'); if (c.passport && !c.date) amber.add('Passport Date');
+  const assetsDemand = m.assets.some((a) => a.cell === c.cell && a.demand !== null);
+  if (c.demandUnits === null && !assetsDemand) amber.add('Demand (units/yr)');
+  if (c.passport && !c.version) amber.add('Passport Version'); if (c.passport && !c.date) amber.add('Passport Date');
   if (c.passport) { if (c.vaHrs === null) amber.add('VA (hrs)'); if (c.envaHrs === null) amber.add('ENVA (hrs)'); if (c.nvaHrs === null) amber.add('NVA (hrs)'); }
   return { factory: c.factory, cellId: c.cell, cellName: c.note, asset: '', sev: worst(xs), missing: headlines(xs), amber,
     vals: { 'Demand (units/yr)': c.demandUnits ?? '', 'VA (hrs)': c.vaHrs ?? '', 'ENVA (hrs)': c.envaHrs ?? '', 'NVA (hrs)': c.nvaHrs ?? '', 'Inspection (hrs)': c.inspectionHrs ?? '', 'Footprint (m²)': c.footprint ?? '', 'Passport Version': c.version, 'Passport Date': c.date } };
@@ -63,7 +65,7 @@ export function cellRow(c: CellLine, xs: Issue[]): Row {
 export function cellAssetRows(m: Model, issues: Issue[]): Row[] {
   const by = new Map<string, Issue[]>(); issues.forEach((i) => { if (i.target && (i.target.kind === 'asset' || i.target.kind === 'cellline')) by.set(`${i.target.kind}:${i.target.ref}`, [...(by.get(`${i.target.kind}:${i.target.ref}`) ?? []), i]); });
   const rows: Row[] = [];
-  m.cellLines.forEach((c) => { const xs = by.get(`cellline:${c.id}`); if (xs) rows.push(cellRow(c, xs)); });
+  m.cellLines.forEach((c) => { const xs = by.get(`cellline:${c.id}`); if (xs) rows.push(cellRow(m, c, xs)); });
   m.assets.forEach((a) => { const xs = by.get(`asset:${a.id}`); if (xs || assumedOf(m, a).length) rows.push(assetRow(m, a, xs ?? [])); });
   return rows.sort((a, b) => a.factory.localeCompare(b.factory) || a.cellId.localeCompare(b.cellId) || (a.asset === '' ? -1 : b.asset === '' ? 1 : a.asset.localeCompare(b.asset)));
 }

@@ -340,7 +340,7 @@ console.log('9. Overall Combined card, compact charts, dense Data table, tooltip
   ok((await row.boundingBox()).height <= 36, 'chart rows are 32–36px');
   const overlaps = await chart.evaluate((el) => { const bad = []; el.querySelectorAll(':scope > div').forEach((r) => { const name = r.children[0]?.getBoundingClientRect(); r.querySelectorAll('span').forEach((sp) => { const b = sp.getBoundingClientRect(); if (sp.textContent && /^-/.test(sp.textContent.trim()) && name && b.left < name.right - 0.5) bad.push(sp.textContent); }); }); return bad; });
   ok(overlaps.length === 0, 'negative value labels never overlap cell names' + (overlaps.length ? ': ' + overlaps : ''));
-  const fs = await page.locator('[aria-label="Effective utilisation versus class limit"] span', { hasText: /%$/ }).first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs === '12px' || fs === '13px', `chart text stays small on wide screens (${fs})`);
+  const fs = await page.locator('[aria-label="Effective utilisation versus class limit"] span', { hasText: /%/ }).first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs === '11px' || fs === '12px' || fs === '13px', `chart text stays small on wide screens (${fs})`);
   await page.setViewportSize({ width: 2200, height: 1000 }); const fs2 = await chart.locator('> div').first().locator('> div').first().evaluate((e) => getComputedStyle(e).fontSize); ok(fs2 === '13px', 'label type is 13px even at 2200px width');
   await page.setViewportSize({ width: 1500, height: 1000 });
   // dense data table, unclipped factory selector, tooltips
@@ -475,18 +475,18 @@ console.log('13. Gap Auto-Fill & Review Wizard');
   await page.getByTestId('open-wizard-data').click();
   const scan = await page.getByTestId('wizard-scan').innerText(); ok(/blank Planned Weeks\s*1/.test(scan) && /blank Shift Pattern\s*2/.test(scan) && /blank Complexity Class\s*1/.test(scan) && /blank OEE \(%\)\s*1/.test(scan), 'step 1 shows live blank counts');
   await page.getByTestId('wizard-next').click();
-  ok((await page.getByTestId('autofill-wizard').getByLabel('Default planned weeks').inputValue()) === '48' && (await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').inputValue()) === '2 Shifts' && (await page.getByTestId('autofill-wizard').getByLabel('Default complexity class').inputValue()) === 'Standard' && (await page.getByTestId('autofill-wizard').getByLabel('Default baseline OEE').inputValue()) === '85', 'step 2 defaults: 48 weeks, 2 Shifts, Standard, 85%');
-  ok((await page.getByTestId('autofill-wizard').getByLabel('Fill Planned Weeks').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Shift Pattern').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Complexity Class').isChecked()) && !(await page.getByTestId('autofill-wizard').getByLabel('Fill Baseline OEE').isChecked()), 'baseline OEE is optional and off');
+  ok((await page.getByTestId('autofill-wizard').getByLabel('Default planned weeks').inputValue()) === '48' && (await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').inputValue()) === '2 Shifts' && (await page.getByTestId('autofill-wizard').getByLabel('Default complexity class').inputValue()) === 'Standard' && (await page.getByTestId('autofill-wizard').getByLabel('Default baseline OEE').inputValue()) === '70', 'step 2 defaults: 48 weeks, 2 Shifts, Standard, 70%');
+  ok((await page.getByTestId('autofill-wizard').getByLabel('Fill Planned Weeks').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Shift Pattern').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Complexity Class').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Baseline OEE').isChecked()), 'all four rules ticked by default (Global OEE 70% now on)');
   ok((await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').locator('option').allInnerTexts()).includes('Continuous 24/7'), 'shift dropdown lists valid shifts');
-  await page.getByTestId('wizard-next').click(); ok(/1 factory planned-weeks value → 48 weeks/.test(await page.getByTestId('wizard-plan').innerText()) && /0 OEE value/.test(await page.getByTestId('wizard-plan').innerText()), 'step 3 previews what will be applied');
+  await page.getByTestId('wizard-next').click(); ok(/1 factory planned-weeks value → 48 weeks/.test(await page.getByTestId('wizard-plan').innerText()) && /1 OEE value/.test(await page.getByTestId('wizard-plan').innerText()), 'step 3 previews what will be applied (incl. OEE)');
   await page.getByTestId('wizard-apply').click();
-  const toast = await page.getByTestId('toasts').innerText(); ok(/filled 4 fields/.test(toast) && /ERROR flags? cleared/.test(toast), 'toast summarises fields filled and ERROR flags cleared: ' + toast.slice(0, 110));
+  const toast = await page.getByTestId('toasts').innerText(); ok(/filled 5 fields/.test(toast) && /ERROR flags? cleared/.test(toast), 'toast summarises fields filled and ERROR flags cleared: ' + toast.slice(0, 110));
   const err1 = Number((await page.getByTestId('sev-ERROR').innerText()).split(' ')[0]); ok(err1 < err0, `ERROR flags cleared immediately (${err0} → ${err1})`);
-  const badges = await page.getByTestId('assumed-badge').count(); ok(badges === 4, `every wizard-filled field shows ASSUMED (${badges})`);
+  const badges = await page.getByTestId('assumed-badge').count(); ok(badges === 5, `every wizard-filled field shows ASSUMED (${badges})`);
   const wrap = page.locator('[data-assumed]').first(); const st = await wrap.locator('select, input').first().evaluate((e) => { const c = getComputedStyle(e); return [c.borderTopStyle, c.borderTopWidth, c.backgroundColor, c.borderTopColor]; });
   ok(st[0] === 'dashed' && parseFloat(st[1]) >= 1 && st[2] === 'rgb(255, 251, 235)' && st[3] === 'rgb(217, 119, 6)', 'dashed amber highlight (#d97706 border, #fffbeb fill): ' + st.join(' '));
   ok((await wrap.getAttribute('title')).includes('Filled by Auto-Fill Wizard — verify or replace with actual data'), 'ASSUMED tooltip explains the provenance');
-  ok(/Show Assumed Only \(4\)/.test(await page.getByTestId('assumed-only').innerText()), 'Show Assumed Only (N) counter');
+  ok(/Show Assumed Only \(5\)/.test(await page.getByTestId('assumed-only').innerText()), 'Show Assumed Only (N) counter');
   const allRows = await page.getByLabel(/^Machines of /).count(); await page.getByTestId('assumed-only').click(); const onlyRows = await page.getByLabel(/^Machines of /).count(); ok(onlyRows > 0 && onlyRows < allRows, `Show Assumed Only filters the table (${allRows} → ${onlyRows})`);
   await page.getByTestId('assumed-only').click();
   // manual edit transitions to user data

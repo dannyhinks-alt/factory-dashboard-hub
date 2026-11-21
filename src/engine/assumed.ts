@@ -50,7 +50,7 @@ export interface WizardRules {
   complexity: { on: boolean; className: string };
   oee: { on: boolean; fraction: number };
 }
-export const DEFAULT_RULES: WizardRules = { plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Standard' }, oee: { on: false, fraction: 0.85 } };
+export const DEFAULT_RULES: WizardRules = { plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Standard' }, oee: { on: true, fraction: 0.70 } };
 
 export interface WizardReport { plannedWeeks: number; shift: number; complexity: number; oee: number; total: number }
 /** Applies only the ticked rules, only to blank fields in scope, and records each one in assumedFields. Mutates `d`. */

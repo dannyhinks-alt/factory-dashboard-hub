@@ -127,6 +127,43 @@ export function DivergingBars({ rows, label }: { rows: { label: string; value: n
       <div className="shrink-0 flex items-center gap-1 text-[12px] text-slate-600 min-w-0" style={{ width: 250 }}><BasisPill passport={!!r.passport} /><span className="truncate" title={r.tag}>{r.tag}</span></div></div>)}</div>;
 }
 
+/** Utilisation vs Complexity Class Limit chart: bars coloured red when over limit, inline context label, formula tooltip. */
+export function UtilBars({ rows, label }: {
+  rows: { assetLabel: string; cellLabel: ReactNode; effUtil: number | null; limit: number | null }[];
+  label: string;
+}) {
+  if (!rows.length) return <div className="text-slate-500 p-4 text-[13px]">No data to chart.</div>;
+  const vals = rows.map((r) => r.effUtil ?? 0); const limits = rows.map((r) => r.limit ?? 0);
+  const hi = Math.max(...vals, ...limits, 0.0001); const range = hi;
+  const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+  const BH = 14;
+  return <div role="img" aria-label={label}>
+    {rows.map((r, i) => {
+      const util = r.effUtil; const lim = r.limit; if (util === null) return null;
+      const overLimit = lim !== null && util > lim;
+      const headroom = lim !== null ? (lim - util) / lim : null;
+      const barW = `${(util / range) * 100}%`;
+      const limX = lim !== null ? `${(lim / range) * 100}%` : null;
+      const tooltip = lim !== null
+        ? `${pct(util)} utilisation / ${pct(lim)} limit · ${headroom !== null ? (headroom >= 0 ? '+' : '') + pct(headroom) : '–'} headroom\nFormula: Required Load ÷ OEE-Adjusted Available Hours = Effective Utilisation\nHeadroom = (Limit − Utilisation) ÷ Limit`
+        : `${pct(util)} utilisation (no limit set)`;
+      const barColor = overLimit ? '#dc2626' : '#0B5CAB';
+      return <div key={`${i}-${r.assetLabel}`} className="flex items-center" style={{ height: ROW }}>
+        <Name text={r.assetLabel} sub={r.cellLabel} />
+        <div className="relative flex-1" style={{ height: ROW, marginLeft: 8, paddingRight: 48 }}>
+          <div className="relative" style={{ height: ROW }}>
+            <div className="absolute" style={{ left: 0, top: (ROW - BH) / 2, height: BH, width: barW, background: barColor, borderRadius: 2 }} title={tooltip} />
+            {limX && <div className="absolute" style={{ left: limX, top: 3, bottom: 3, width: 2, background: '#0F172A' }} title={`Complexity class limit: ${pct(lim!)}`} />}
+            <span className="absolute text-[11px] tabular-nums whitespace-nowrap font-mono" style={{ top: (ROW - 11) / 2, left: barW, marginLeft: 6 }}>
+              {pct(util)}{lim !== null ? ` / ${pct(lim)} limit · ` : ' · '}
+              <span style={{ color: overLimit ? '#dc2626' : headroom !== null && headroom < 0.1 ? '#D97706' : '#059669' }}>
+                {headroom !== null ? (headroom >= 0 ? '+' : '') + pct(headroom) + ' headroom' : '–'}
+              </span>
+            </span>
+          </div></div></div>; })}
+    <Legend items={[{ name: 'Effective utilisation (within limit)', color: '#0B5CAB' }, { name: 'Over limit', color: '#dc2626' }, { name: 'Class limit', color: '#0F172A' }]} /></div>;
+}
+
 export function Ring({ value, size = 84, label }: { value: number | null; size?: number; label: string }) {
   const r = size / 2 - 8, c = 2 * Math.PI * r, v = value === null ? 0 : Math.min(1, Math.max(0, value));
   const col = value === null ? '#94A3B8' : value > 1 ? '#E11D48' : value > 0.85 ? '#D97706' : '#059669';

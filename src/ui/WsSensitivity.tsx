@@ -1,16 +1,94 @@
+import { useState } from 'react';
 import { QUICK_PRESETS, SHIFTS } from '../engine/constants';
-import { cells } from '../engine/calc';
+import { cells, pct } from '../engine/calc';
 import type { LeverSet } from '../engine/types';
 import { BandChip } from './kit';
-import { band, pct, n1 } from '../engine/calc';
-import { pressureList, releaseCandidates, scenarioResult, testSets } from '../engine/sensitivity';
+import { band, n1 } from '../engine/calc';
+import { assetScenario, factoryScenarioDelta, pressureList, releaseCandidates, scenarioResult, testSets } from '../engine/sensitivity';
+import type { AssetScenarioResult, FactoryScenarioParams } from '../engine/sensitivity';
 import { useApp } from '../store';
-import { BasisPill, Card, Empty, Field, FocusRow, NumInput, Sel, Th } from './kit';
+import { BasisPill, Card, Empty, Field, FocusRow, NumInput, Seg, Sel, Th } from './kit';
 import { cellIsPassport } from '../engine/overview';
 import { factoriesOf } from '../engine/calc';
 
+const BLANK_FACTORY_SCEN: FactoryScenarioParams = { factory: '', loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '', plannedWeeksAdd: 0 };
+
+/** Asset-in-Cell Scenario Planner: cascading Factory → Cell → Asset selector with live Before/After and log/apply. */
+function AssetPlanner() {
+  const { model, edit, toast } = useApp();
+  const facs = factoriesOf(model);
+  const [selFac, setFac] = useState(facs[0] ?? '');
+  const [selCell, setCell] = useState('');
+  const [selAsset, setAsset] = useState('');
+  const [lever, setLever] = useState({ loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '' });
+  const cells_ = [...new Set(model.assets.filter((a) => !selFac || a.factory === selFac).map((a) => a.cell))];
+  const assets_ = model.assets.filter((a) => (!selFac || a.factory === selFac) && (!selCell || a.cell === selCell)).map((a) => a.asset);
+  const result: AssetScenarioResult | null = selFac && selCell && selAsset ? assetScenario(model, selFac, selCell, selAsset, lever) : null;
+  const delta = (a: number | null, b: number | null) => a !== null && b !== null ? (b - a) : null;
+  const fmtDelta = (d: number | null) => d === null ? '–' : (d >= 0 ? '+' : '') + pct(d);
+  const reset = () => setLever({ loadPct: 0, oeePts: 0, machinesAdd: 0, shift: '' });
+  const log = () => {
+    if (!selFac || !selCell || !selAsset) return;
+    edit((d) => { d.scenarios.push({ id: `S${Date.now().toString(36)}`, name: `${selAsset} test`, factory: selFac, cell: selCell, asset: selAsset, ...lever, note: `Planner: ${new Date().toLocaleDateString('en-GB')}`, reroute: 0 }); });
+    toast(`Scenario logged for ${selAsset}`, 'good');
+  };
+  const apply = () => {
+    if (!selFac || !selCell || !selAsset) return;
+    if (!window.confirm(`Apply scenario levers to master model for ${selAsset}? This permanently changes the asset's machines, OEE and shift in the workspace.`)) return;
+    edit((d) => {
+      const a = d.assets.find((x) => x.factory === selFac && x.cell === selCell && x.asset === selAsset);
+      if (!a) return;
+      if (lever.machinesAdd) { a.machines = (a.machines ?? 0) + lever.machinesAdd; }
+      if (lever.oeePts) { a.oee = Math.min(1, (a.oee ?? 0) + lever.oeePts); a.modelOee = Math.min(1, (a.modelOee ?? 0) + lever.oeePts); }
+      if (lever.shift) { a.shift = lever.shift; a.modelShift = lever.shift; }
+    });
+    toast(`Applied scenario to ${selAsset} in master model`, 'good');
+    reset();
+  };
+
+  return <Card title="Asset-in-Cell Scenario Planner" source="Factory Model (live test, not saved until logged)" right={<span className="text-xs text-slate-500">Test levers on one asset · Log to scenario table · Apply to master model</span>}>
+    <div className="grid gap-3">
+      <div className="flex flex-wrap gap-3 items-end">
+        <Field label="Factory"><Sel label="Planner factory" gap={false} blank="Select factory" value={selFac} options={facs} onChange={(v) => { setFac(v); setCell(''); setAsset(''); }} /></Field>
+        <Field label="Cell"><Sel label="Planner cell" gap={false} blank="Select cell" value={selCell} options={cells_} onChange={(v) => { setCell(v); setAsset(''); }} /></Field>
+        <Field label="Asset"><Sel label="Planner asset" gap={false} blank="Select asset" value={selAsset} options={[...new Set(assets_)]} onChange={(v) => setAsset(v)} /></Field>
+      </div>
+      <div className="flex flex-wrap gap-3 items-end">
+        <Field label="Yearly Demand change %"><NumInput pct gap={false} label="Demand change" value={lever.loadPct} onChange={(v) => setLever((l) => ({ ...l, loadPct: v ?? 0 }))} /></Field>
+        <Field label="OEE uplift (pts)"><NumInput pct gap={false} label="OEE uplift" value={lever.oeePts} onChange={(v) => setLever((l) => ({ ...l, oeePts: v ?? 0 }))} /></Field>
+        <Field label="Machines to add"><NumInput gap={false} label="Machines to add" value={lever.machinesAdd} onChange={(v) => setLever((l) => ({ ...l, machinesAdd: v ?? 0 }))} /></Field>
+        <Field label="Shift override"><Sel label="Shift override" gap={false} blank="Unchanged" value={lever.shift} options={SHIFTS} onChange={(v) => setLever((l) => ({ ...l, shift: v }))} /></Field>
+      </div>
+      {result && <div className="grid grid-cols-2 gap-3">
+        <div className="border border-slate-200 rounded p-3 text-[13px]">
+          <div className="font-semibold text-slate-600 mb-1">Asset headroom</div>
+          <div className="flex gap-2 items-center">
+            <span className="text-slate-500">Before:</span><b className="font-mono">{pct(result.assetBefore)}</b>
+            <span className="text-slate-400">→</span>
+            <span className="text-slate-500">After:</span>
+            <b className="font-mono" style={{ color: (result.assetAfter ?? 0) >= (result.assetBefore ?? 0) ? '#059669' : '#E11D48' }}>{pct(result.assetAfter)}</b>
+            <span className="text-xs text-slate-500">({fmtDelta(delta(result.assetBefore, result.assetAfter))})</span></div></div>
+        <div className="border border-slate-200 rounded p-3 text-[13px]">
+          <div className="font-semibold text-slate-600 mb-1">Cell headroom</div>
+          <div className="flex gap-2 items-center">
+            <span className="text-slate-500">Before:</span><b className="font-mono">{pct(result.cellBefore)}</b>
+            <span className="text-slate-400">→</span>
+            <span className="text-slate-500">After:</span>
+            <b className="font-mono" style={{ color: (result.cellAfter ?? 0) >= (result.cellBefore ?? 0) ? '#059669' : '#E11D48' }}>{pct(result.cellAfter)}</b>
+            <span className="text-xs text-slate-500">({fmtDelta(delta(result.cellBefore, result.cellAfter))})</span>
+            <BandChip band={result.bandBefore} /><span className="text-slate-400">→</span><BandChip band={result.bandAfter} /></div></div>
+      </div>}
+      <div className="flex gap-2">
+        <button className="btn" onClick={reset}>Reset Test</button>
+        <button className="btn-p" disabled={!selAsset} onClick={log}>Log Scenario</button>
+        <button className="btn" disabled={!result} onClick={apply} title="Apply these levers directly to the master model (irreversible without Clear/Blank)">Apply to Master Model</button>
+      </div>
+    </div></Card>;
+}
+
 export function WsSensitivity() {
   const { model, edit, focus, filters, toast } = useApp();
+  const [factScen, setFactScen] = useState<FactoryScenarioParams>(BLANK_FACTORY_SCEN);
   const inScope = (f: string) => filters.factory === 'All' || f === filters.factory;
   const pl = pressureList(model).filter((p) => inScope(p.c.asset.factory)); const sets = testSets(model); const rel = releaseCandidates(model).filter((c) => inScope(c.asset.factory));
   const facs = factoriesOf(model);
@@ -28,7 +106,32 @@ export function WsSensitivity() {
   const assetKey = (f: string, c: string, a: string) => `${f}|${c}|${a}`;
   const assetOpts = model.assets.map((a) => assetKey(a.factory, a.cell, a.asset));
   if (!model.assets.length) return <Empty><b>No assets yet.</b><br />The pressure list, 3-set lever tester and scenario log fill in once assets with load, machines and shifts are loaded. Import a workbook or add assets in <b>2. Data &amp; Gap Filler</b>.</Empty>;
+  const factDelta = factoryScenarioDelta(model, factScen);
+  const setFS = <K extends keyof FactoryScenarioParams>(k: K, v: FactoryScenarioParams[K]) => setFactScen((s) => ({ ...s, [k]: v }));
+  const fmtDelta = (a: number, b: number) => { const d = b - a; return <span style={{ color: d > 0 ? '#059669' : d < 0 ? '#E11D48' : '#64748B' }}>{a} → <b>{b}</b> ({d >= 0 ? '+' : ''}{d})</span>; };
+
   return <div className="grid gap-4">
+    <Card title="Overall Factory Scenario Controls" source="Factory Model (macro levers — not saved to master data)" right={<span className="text-xs text-slate-500">Estate-wide or per-factory · live Baseline vs Scenario delta</span>}>
+      <div className="grid gap-3">
+        <div className="flex flex-wrap gap-3 items-end">
+          <Field label="Scope"><Seg label="Scenario scope" value={factScen.factory === '' ? 'All' : 'One factory'} options={['All', 'One factory'] as const} onChange={(v) => setFS('factory', v === 'All' ? '' : facs[0] ?? '')} /></Field>
+          {factScen.factory !== '' && <Field label="Factory"><Sel label="Scenario factory" gap={false} blank="" value={factScen.factory} options={facs} onChange={(v) => setFS('factory', v)} /></Field>}
+          <Field label="Yearly Demand %"><NumInput pct gap={false} label="Demand change %" value={factScen.loadPct} onChange={(v) => setFS('loadPct', v ?? 0)} /></Field>
+          <Field label="OEE uplift (pts)"><NumInput pct gap={false} label="OEE uplift pts" value={factScen.oeePts} onChange={(v) => setFS('oeePts', v ?? 0)} /></Field>
+          <Field label="+Planned weeks"><NumInput gap={false} label="Extra planned weeks" value={factScen.plannedWeeksAdd} onChange={(v) => setFS('plannedWeeksAdd', v ?? 0)} /></Field>
+          <Field label="Site Shift Policy"><Sel label="Site shift override" gap={false} blank="Unchanged" value={factScen.shift} options={SHIFTS} onChange={(v) => setFS('shift', v)} /></Field>
+          <button className="btn self-end" onClick={() => setFactScen(BLANK_FACTORY_SCEN)}>Reset</button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[13px]">
+          <div className="border border-slate-200 rounded p-2"><div className="text-slate-500 mb-1">GREEN cells</div>{fmtDelta(factDelta.baseGreen, factDelta.scenGreen)}</div>
+          <div className="border border-slate-200 rounded p-2"><div className="text-slate-500 mb-1">AMBER cells</div>{fmtDelta(factDelta.baseAmber, factDelta.scenAmber)}</div>
+          <div className="border border-slate-200 rounded p-2"><div className="text-slate-500 mb-1">RED cells</div>{fmtDelta(factDelta.baseRed, factDelta.scenRed)}</div>
+          <div className="border border-slate-200 rounded p-2"><div className="text-slate-500 mb-1">Overloaded cells</div>{fmtDelta(factDelta.overloadedBefore, factDelta.overloadedAfter)}</div>
+        </div>
+        <div className="text-[12px] text-slate-500">Worst cell headroom: Baseline <b className="font-mono">{factDelta.baseWorst !== null ? pct(factDelta.baseWorst) : '–'}</b> → Scenario <b className="font-mono">{factDelta.scenWorst !== null ? pct(factDelta.scenWorst) : '–'}</b></div>
+      </div></Card>
+
+    <AssetPlanner />
     <Card title="Pressure List" term="Break-Even" source="Factory Model (Data sheet)" right={<span className="text-xs">Worst headroom first; each column is a single-lever break-even</span>}>
       <div className="overflow-auto max-h-[50vh]"><table className="w-full"><thead><tr><Th>#</Th><Th>Factory</Th><Th>Cell</Th><Th>Source</Th><Th>Asset</Th><Th term="Headroom">Headroom</Th><Th>Band</Th><Th term="Break-Even">Load change</Th><Th>OEE needed</Th><Th term="Machines to add">Machines to add</Th><Th>Shift pattern needed</Th></tr></thead>
         <tbody>{pl.map((p, i) => <FocusRow key={p.c.asset.id} match={focus?.kind === 'asset' && focus.ref === p.c.asset.id}><td className="td">{i + 1}</td><td className="td">{p.c.asset.factory}</td><td className="td">{p.c.asset.cell}</td><td className="td"><BasisPill passport={cellIsPassport(model, p.c.asset.factory, p.c.asset.cell)} /></td><td className="td font-medium">{p.c.asset.asset}</td><td className="td font-mono">{pct(p.headroom)}</td><td className="td"><BandChip band={band(p.headroom)} /></td>

@@ -4,7 +4,7 @@ import { fiveLines, scopedCells } from '../engine/story';
 import { useApp } from '../store';
 import { factoryKey } from '../engine/assumed';
 import { Assumed, Card, BandChip, BasisPill, Empty, FocusRow, NumInput, Seg, Sel, SourceBadge, Th, Label, Field } from './kit';
-import { DivergingBars, HBars, Ring, StackedH } from './charts';
+import { DivergingBars, HBars, Ring, StackedH, UtilBars } from './charts';
 
 const VCOL = { GOOD: '#059669', WATCH: '#D97706', BAD: '#E11D48' } as const;
 const ACC = { GREEN: 'accent-good', AMBER: 'accent-watch', RED: 'accent-bad', NONE: 'accent-none' } as const;
@@ -21,7 +21,14 @@ export function WsDashboard() {
   const idx = (k: string) => mcells.findIndex((c) => c.key === k);
   const bs = filters.source;
   const series = bs === 'Both' ? [{ name: 'Model', color: '#0B5CAB' }, { name: 'Passport', color: '#C2410C' }] : bs === 'Model' ? [{ name: 'Model', color: '#0B5CAB' }] : [{ name: 'Passport', color: '#C2410C' }];
-  const utilRows = scoped.map((c) => c.bottleneck).filter(Boolean).map((b) => ({ label: b!.asset.asset, sub: <><span className="truncate" title={b!.asset.cell}>{b!.asset.cell}</span><BasisPill passport={cellIsPassport(model, b!.asset.factory, b!.asset.cell)} otherLabel="Model only" /></>, values: [b!.effUtil], lim: b!.limit }));
+  const PASSIVE_KEYWORDS = /acclimatisation|storage|buffer/i;
+  const utilRows = scoped.map((c) => c.bottleneck).filter(Boolean).map((b) => {
+    const isPassive = PASSIVE_KEYWORDS.test(b!.asset.asset);
+    const lowShift = b!.asset.shift && /^1\s*shift|^2\s*shift/i.test(b!.asset.shift);
+    const stdComplexity = b!.asset.complexity === 'Standard';
+    const passiveNote = isPassive && (lowShift || stdComplexity) ? ' · passive holding: may be over-sized at this shift/limit' : '';
+    return { label: b!.asset.asset + passiveNote, sub: <><span className="truncate" title={b!.asset.cell}>{b!.asset.cell}</span><BasisPill passport={cellIsPassport(model, b!.asset.factory, b!.asset.cell)} otherLabel="Model only" /></>, values: [b!.effUtil], lim: b!.limit };
+  });
   const actions = nextActions(model, checks.issues, filters);
   const take = executiveTakeaway(model, filters, checks.counts.ERROR);
   if (!model.assets.length && !model.cellLines.length) return <Empty><p className="font-semibold text-slate-700 mb-1" data-testid="empty-onboarding">This workspace is blank.</p><p>Start by opening your <b>.xlsx</b> workbook (top bar), or go to <b>2. Data &amp; Gap Filler</b> and add a cell line and its assets. Every chart and table fills in as soon as there is data.</p></Empty>;
@@ -118,8 +125,8 @@ export function WsDashboard() {
         <StackedH label="Time split" pctMode parts={[{ name: 'VA', color: '#059669' }, { name: 'ENVA', color: '#D97706' }, { name: 'NVA', color: '#E11D48' }]} rows={ts.tot ? [{ label: filters.factory, v: [ts.va, ts.enva, ts.nva] }] : []} unit=" h" /></Card>
       <Card title="Calendar Hours Breakdown" term="Calendar Hours" source="Factory Model (Data sheet)">
         <StackedH label="Calendar hours" unit=" h" parts={[{ name: 'Not scheduled', color: '#94A3B8' }, { name: 'OEE loss', color: '#D97706' }, { name: 'Load used', color: '#0B5CAB' }, { name: 'Free', color: '#059669' }, { name: 'Unmet load', color: '#E11D48' }]} rows={cal.map((c) => ({ label: c.factory, v: [c.notScheduled, c.oeeLoss, c.load, c.free, c.overload] }))} /></Card>
-      <Card title="Effective Utilisation vs Complexity Class Limit" term="Effective Utilisation" source="Factory Model &amp; Cell Passport (OEE-adjusted)">
-        <HBars label="Effective utilisation versus class limit" rows={utilRows.map((r) => ({ label: r.label, sub: r.sub, values: r.values }))} series={[{ name: 'Effective utilisation', color: '#0B5CAB' }]} marker={(i) => utilRows[i].lim ?? null} fmt={(v) => `${(v * 100).toFixed(0)}%`} /></Card>
+      <Card title="Effective Utilisation vs Complexity Class Limit" term="Effective Utilisation" source="Factory Model &amp; Cell Passport (OEE-adjusted)" right={<span className="text-xs text-slate-500">Red bar = over limit · hover for formula</span>}>
+        <UtilBars label="Effective utilisation versus class limit" rows={utilRows.map((r) => ({ assetLabel: r.label, cellLabel: r.sub, effUtil: r.values[0] ?? null, limit: r.lim ?? null }))} /></Card>
     </div>
     <Card title="The story in five lines" source="Factory Model, Cell Passport &amp; Product Flow (FPD)"><ol className="list-decimal ml-5 space-y-1" data-testid="story">{fiveLines(model, filters, checks.counts.ERROR).map((l, i) => <li key={i}>{l}</li>)}</ol></Card>
   </div>;

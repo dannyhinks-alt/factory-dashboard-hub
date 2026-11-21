@@ -2,6 +2,65 @@ import { band, calcAsset, cells, machinesToAdd, num, shiftOrder, rollCell } from
 import type { AssetCalc, Lever } from './calc';
 import type { LeverSet, Model, Scenario } from './types';
 
+export interface FactoryScenarioParams {
+  factory: string; // '' = all factories
+  loadPct: number;
+  oeePts: number;
+  machinesAdd: number;
+  shift: string;
+  plannedWeeksAdd: number; // extra weeks to add to current (0 = no change)
+}
+
+export interface FactoryScenarioDelta {
+  baseGreen: number; baseAmber: number; baseRed: number; baseWorst: number | null;
+  scenGreen: number; scenAmber: number; scenRed: number; scenWorst: number | null;
+  overloadedBefore: number; overloadedAfter: number;
+}
+
+/** Computes estate-wide or per-factory before/after RAG band deltas for a macro lever scenario. */
+export function factoryScenarioDelta(m: Model, p: FactoryScenarioParams): FactoryScenarioDelta {
+  const inScope = (f: string) => !p.factory || f === p.factory;
+  const lever: Lever = { loadPct: p.loadPct, oeePts: p.oeePts, machinesAdd: p.machinesAdd, shift: p.shift };
+  const levFn = (a: { factory: string }) => inScope(a.factory) ? lever : undefined;
+  // apply extra planned-weeks only within scope
+  let mScen = m;
+  if (p.plannedWeeksAdd !== 0) {
+    mScen = structuredClone(m);
+    for (const f of Object.keys(mScen.settings.plannedWeeks)) {
+      if (inScope(f) && mScen.settings.plannedWeeks[f] !== null) mScen.settings.plannedWeeks[f] = mScen.settings.plannedWeeks[f]! + p.plannedWeeksAdd;
+    }
+  }
+  const base = cells(m, 'model').filter((c) => inScope(c.factory));
+  const scen = cells(mScen, 'model', levFn as never).filter((c) => inScope(c.factory));
+  const hs = (cs: typeof base) => cs.filter((c) => c.headroom !== null).map((c) => c.headroom!);
+  const bhs = hs(base), shs = hs(scen);
+  return {
+    baseGreen: base.filter((c) => c.band === 'GREEN').length, baseAmber: base.filter((c) => c.band === 'AMBER').length, baseRed: base.filter((c) => c.band === 'RED').length,
+    baseWorst: bhs.length ? Math.min(...bhs) : null,
+    scenGreen: scen.filter((c) => c.band === 'GREEN').length, scenAmber: scen.filter((c) => c.band === 'AMBER').length, scenRed: scen.filter((c) => c.band === 'RED').length,
+    scenWorst: shs.length ? Math.min(...shs) : null,
+    overloadedBefore: base.filter((c) => c.headroom !== null && c.headroom < 0).length,
+    overloadedAfter: scen.filter((c) => c.headroom !== null && c.headroom < 0).length,
+  };
+}
+
+/** Live single-asset scenario: test levers on one asset and see before/after for asset + cell. */
+export interface AssetScenarioResult {
+  assetBefore: number | null; assetAfter: number | null;
+  cellBefore: number | null; cellAfter: number | null;
+  bandBefore: ReturnType<typeof band>; bandAfter: ReturnType<typeof band>;
+}
+export function assetScenario(m: Model, factory: string, cell: string, assetName: string, lever: Lever): AssetScenarioResult | null {
+  const a = m.assets.find((x) => x.factory === factory && x.cell === cell && x.asset === assetName);
+  if (!a) return null;
+  const before = calcAsset(m, a, 'model'), after = calcAsset(m, a, 'model', lever);
+  const cellAssets = m.assets.filter((x) => x.factory === factory && x.cell === cell);
+  const cb = rollCell(factory, cell, cellAssets.map((x) => calcAsset(m, x, 'model')));
+  const ca = rollCell(factory, cell, cellAssets.map((x) => calcAsset(m, x, 'model', x === a ? lever : undefined)));
+  return { assetBefore: before.headroom, assetAfter: after.headroom, cellBefore: cb.headroom, cellAfter: ca.headroom, bandBefore: band(cb.headroom), bandAfter: band(ca.headroom) };
+}
+
+
 export interface Pressure {
   c: AssetCalc; headroom: number;
   loadChange: number; oeeNeeded: number | null; machines: number | null; shiftNeeded: string;
