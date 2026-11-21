@@ -144,8 +144,11 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   ok((await page.getByTestId('selftest-total').innerText()).startsWith('10 / 10') && (await page.getByTestId('selftest-10').isVisible()), '10-point self-test drawer: 10/10 Passed');
   await page.screenshot({ path: 'e2e/out/governance.png', fullPage: true });
 
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .xlsx' }).click()]);
-  const p = 'e2e/out/export.xlsx'; await dl.saveAs(p);
+  const savesBefore = await page.evaluate(() => window.__saves.length);
+  await page.getByRole('button', { name: 'Export .xlsx' }).click();
+  await page.waitForFunction((n) => window.__saves.length > n, savesBefore, { timeout: 5000 });
+  const xlsxArr = await page.evaluate((n) => Array.from(new Uint8Array(window.__saves[n].buffer ?? window.__saves[n])), savesBefore);
+  const p = 'e2e/out/export.xlsx'; writeFileSync(p, Buffer.from(xlsxArr));
   const wb = XLSX.read(readFileSync(p)); ok(['Dashboard', 'Compare', 'Data', 'Assessor', 'FPD', 'Lead time', 'Sensitivity', 'Levers', 'Scenarios', 'Register', 'Settings', 'Dictionary'].every((s) => wb.SheetNames.includes(s)), 'export has all 12 tabs');
   const data = XLSX.utils.sheet_to_json(wb.Sheets.Data, { header: 1 }); ok(data.some((r) => r[2] === 'Temper Oven' && r[12] === 0.82), 'exported .xlsx carries the filled gap');
   const [dd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .docx' }).click()]);
@@ -170,6 +173,7 @@ console.log('5. Partial .xlsx ingestion, then re-import of the export');
   ok((await page.getByLabel('Complexity of Furnace').inputValue()) === 'Precision', 'dropdown gap-fill');
   for (const n of [1, 2, 3, 4]) { await page.getByTestId(`ws-${n}`).click(); }
   ok(true, 'all 4 workspaces render on partial data');
+  await page.evaluate(() => { delete window.showSaveFilePicker; }); // force download fallback — no picker mock in this section
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .xlsx' }).click()]);
   await dl.saveAs('e2e/out/partial-export.xlsx');
   const wb2 = XLSX.read(readFileSync('e2e/out/partial-export.xlsx')); ok(wb2.SheetNames.includes('Cover'), 'export preserves untouched original tabs');
@@ -380,6 +384,7 @@ console.log('10. Export Gaps / Import Filled Gaps');
   ok(await page.getByTestId('export-gaps').isVisible() && await page.getByTestId('import-gaps').isVisible(), 'Export Gaps and Import Filled Gaps buttons in the Gap & Action Summary header');
   const warn0 = Number((await page.getByTestId('sev-WARN').innerText()).split(' ')[0]);
   await page.locator('[data-testid=factory-filter] button', { hasText: /^DPF$/ }).click();
+  await page.evaluate(() => { delete window.showSaveFilePicker; }); // force download fallback — no picker mock in this section
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-gaps').click()]);
   ok(/^Factory_Data_Gaps_DPF_\d{4}-\d{2}-\d{2}\.xlsx$/.test(dl.suggestedFilename()), `file name follows the filter (${dl.suggestedFilename()})`);
   await dl.saveAs('e2e/out/gaps.xlsx');
@@ -410,7 +415,7 @@ console.log('11. Save App + Data (.html): the app file carries the data');
   await page.getByTestId('programme-name').fill('Carried inside the file');
   ok(await page.getByTestId('save-app-data').isVisible(), 'Save App + Data (.html) button in the top command bar');
   await page.getByTestId('save-app-data').click(); await page.waitForFunction(() => window.__saved.length > 1000);
-  const opts = await page.evaluate(() => window.__picker); ok(opts.suggestedName === 'Factory_Dashboard_Hub_Master.html' && opts.id === 'factory-hub-self-save' && opts.types[0].description === 'Self-Contained HTML App' && opts.types[0].accept['text/html'][0] === '.html', 'file picker options as specified');
+  const opts = await page.evaluate(() => window.__picker); ok(opts.suggestedName === 'Factory_Dashboard_Hub_Master.html' && opts.id === 'factory-hub-app-folder' && opts.types[0].description === 'Self-Contained HTML App' && opts.types[0].accept['text/html'][0] === '.html', 'file picker options as specified');
   ok((await page.getByTestId('toasts').innerText()).includes('Saved self-contained app + master data (.html) — ready to move or share anywhere.'), 'confirmation toast');
   const html = await page.evaluate(() => window.__saved);
   const tag = html.match(/<script id="embedded-master-state" type="application\/json">([\s\S]*?)<\/script>/);
@@ -496,6 +501,7 @@ console.log('13. Gap Auto-Fill & Review Wizard');
   // persistence
   await page.reload(); await page.getByTestId('gap-panel').waitFor(); await page.getByTestId('ws-2').click(); ok((await page.getByTestId('assumed-badge').count()) === badges - 2, 'assumed flags survive a reload');
   // export gaps keeps them
+  await page.evaluate(() => { delete window.showSaveFilePicker; }); // force download fallback — no picker mock in this section
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-gaps').click()]); await dl.saveAs('e2e/out/assumed-gaps.xlsx');
   const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile('e2e/out/assumed-gaps.xlsx'); let hit = 0; wb.getWorksheet('Cell & Asset Gaps').eachRow((r, n) => { if (n > 1 && String(r.getCell(6).value).includes('Wizard assumption — please verify')) hit++; }); ok(hit >= 1, `Export Gaps flags wizard assumptions (${hit} row${hit === 1 ? '' : 's'})`);
   // revert

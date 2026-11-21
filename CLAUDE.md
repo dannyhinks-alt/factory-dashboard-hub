@@ -95,6 +95,13 @@ All four rules are **on by default**. OEE default is **70 %** (not 85 %).
 - `pruneAssumed(before, after)` — call after every model diff to clear keys whose values changed.
 - `revertUnverified(m)` — restores blanks for still-assumed fields; returns count reverted.
 
+### Shared folder memory (`src/persist.ts`)
+
+- Every `showOpenFilePicker` and `showSaveFilePicker` call passes `id: 'factory-hub-app-folder'` and `startIn: _lastHandle ?? 'desktop'`.
+- The module-level `_lastHandle` is updated after every picker resolves (open or save), so the browser remembers and opens the application folder each time.
+- `pickOpenFile(description, accept)` — returns `File | null` (null = API unavailable or user cancelled). Falls back to `<input type="file">` at the call site.
+- `pickSaveFile(suggested, description, accept)` — returns `FsHandle | null` (null = API unavailable). Throws `AbortError` when user cancels; callers fall back to `download()` only when null is returned.
+
 ---
 
 ## TypeScript conventions

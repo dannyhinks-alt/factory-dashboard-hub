@@ -19,7 +19,7 @@ import type { FocusTarget, Model, ScopeFilters, Severity } from '../engine/types
 import { UPLIFTS } from '../engine/constants';
 import { AppCtx } from '../store';
 import { buildDocx } from '../docxExport';
-import { deserialise, download, fsSupported, pickSaveFile, serialise, writeHandle } from '../persist';
+import { deserialise, download, fsOpenSupported, fsSupported, pickOpenFile, pickSaveFile, serialise, writeHandle } from '../persist';
 import type { FsHandle } from '../persist';
 import { currentPageWithData, pickBootState, readEmbeddedText, saveHtml, SELF_SAVE_TOAST, setEmbeddedText } from '../selfSave';
 import { Info, Seg } from './kit';
@@ -110,12 +110,28 @@ export function App() {
   };
   const exportGaps = async () => {
     if (!model || !checks) return;
-    download(gapFileName(filters.factory, new Date().toISOString().slice(0, 10)), await buildGapWorkbook(model, checks.issues, filters.factory, new Date().toISOString().slice(0, 10)), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const name = gapFileName(filters.factory, new Date().toISOString().slice(0, 10));
+    const data = await buildGapWorkbook(model, checks.issues, filters.factory, new Date().toISOString().slice(0, 10));
+    const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    try {
+      const h = await pickSaveFile(name, 'Excel Workbook (.xlsx)', { [type]: ['.xlsx'] });
+      if (h === null) { download(name, data, type); } else { await writeHandle(h, data as ArrayBufferView); }
+    } catch (e) { if ((e as Error).name !== 'AbortError') { toast(`Export failed: ${(e as Error).message}`, 'warn'); return; } else return; }
     toast(`Exported ${checks.issues.length} flag${checks.issues.length === 1 ? '' : 's'} for ${filters.factory === 'All' ? 'all factories' : filters.factory}: fill the amber boxes, then use Import Filled Gaps`, 'info');
   };
   const openXlsx = async (file: File) => {
     try { const buf = await file.arrayBuffer(); const wb0 = XLSX.read(buf, { type: 'array' }); if (looksLikeGapWorkbook(wb0)) { importGaps(wb0); return; } const r = readWorkbook(buf, file.name); load(r.model, r.wb, r.warnings, importSummary(r.model)); }
     catch (e) { setErr(`Could not read "${file.name}" as an .xlsx workbook: ${(e as Error).message}`); }
+  };
+  const pickAndOpenXlsx = async () => {
+    if (!fsOpenSupported()) { fileRef.current?.click(); return; }
+    const file = await pickOpenFile('Excel Workbook (.xlsx)', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xlsm'] });
+    if (file) void openXlsx(file);
+  };
+  const pickAndImportGaps = async () => {
+    if (!fsOpenSupported()) { gapRef.current?.click(); return; }
+    const file = await pickOpenFile('Filled Gaps Workbook (.xlsx)', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] });
+    if (file) { try { importGaps(XLSX.read(await file.arrayBuffer(), { type: 'array' })); } catch (er) { setErr(`Could not read "${file.name}": ${(er as Error).message}`); } }
   };
   const openJson = async (file: File) => { try { load(deserialise(await file.text()), null, ['Loaded from auto-save file.']); } catch (e) { setErr((e as Error).message); } };
 
@@ -132,7 +148,9 @@ export function App() {
     if (!model) return;
     try {
       if (!fsSupported()) { download('factory-hub-autosave.json', serialise(model), 'application/json'); setDirty(false); setSave({ kind: 'saved', at: new Date().toLocaleTimeString('en-GB') + ' (downloaded: browser lacks File System Access)' }); return; }
-      const h = await pickSaveFile('factory-hub-autosave.json'); await writeHandle(h, serialise(model)); setHandle(h); setDirty(false); setSave({ kind: 'saved', at: new Date().toLocaleTimeString('en-GB') });
+      const h = await pickSaveFile('factory-hub-autosave.json', 'Hub auto-save (.json)', { 'application/json': ['.json'] });
+      if (h === null) return;
+      await writeHandle(h, serialise(model)); setHandle(h); setDirty(false); setSave({ kind: 'saved', at: new Date().toLocaleTimeString('en-GB') });
     } catch (e) { if ((e as Error).name !== 'AbortError') setSave({ kind: 'error', msg: (e as Error).message }); }
   };
   const saveAppData = async () => {
@@ -142,7 +160,17 @@ export function App() {
       if (saved) { setEmbeddedText(model); if (!handle) setDirty(false); toast(SELF_SAVE_TOAST, 'good'); }
     } catch (e) { toast(`Could not save the .html: ${(e as Error).message}`, 'warn'); }
   };
-  const exportX = () => { if (!model) return; download(model.sourceName.replace(/\.xlsx$/i, '') + ' (updated).xlsx', exportWorkbook(model, wbRef.current, UPLIFTS[filters.uplift] ?? 0), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); if (!handle) setDirty(false); };
+  const exportX = async () => {
+    if (!model) return;
+    const name = model.sourceName.replace(/\.xlsx$/i, '') + ' (updated).xlsx';
+    const data = exportWorkbook(model, wbRef.current, UPLIFTS[filters.uplift] ?? 0);
+    const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    try {
+      const h = await pickSaveFile(name, 'Excel Workbook (.xlsx)', { [type]: ['.xlsx'] });
+      if (h === null) { download(name, data, type); } else { await writeHandle(h, data as ArrayBufferView); }
+    } catch (e) { if ((e as Error).name !== 'AbortError') toast(`Export failed: ${(e as Error).message}`, 'warn'); else return; }
+    if (!handle) setDirty(false);
+  };
   const exportD = async () => { if (model && checks) download('Factory Dashboard Summary.docx', await buildDocx(model, filters, checks), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); };
 
   const goTo = useCallback((t: FocusTarget) => { setWs(t.ws); setFocus({ ...t }); setTimeout(() => setFocus((f) => (f === null || f.ref !== t.ref ? f : null)), 6000); }, []);
@@ -165,11 +193,11 @@ export function App() {
         {model && <span className="text-xs text-slate-400 mr-auto" data-testid="source-name">{model.sourceName}</span>}
         {!model && <span className="mr-auto" />}
         {model && <>
-          <button className="btn" onClick={() => fileRef.current?.click()}>Open .xlsx</button>
+          <button className="btn" onClick={() => void pickAndOpenXlsx()}>Open .xlsx</button>
           <button className="btn" onClick={link}>Link Auto-Save (.json)</button>
           <button className="btn" data-testid="save-app-data" onClick={() => void saveAppData()}>Save App + Data (.html)</button>
           <span data-testid="save-pill" role="status" className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ background: pill.c }}>{pill.t}</span>
-          <button className="btn" onClick={exportX}>Export .xlsx</button>
+          <button className="btn" onClick={() => void exportX()}>Export .xlsx</button>
           <button className="btn" onClick={exportD}>Export .docx</button>
           <button className="btn" onClick={() => window.print()}>Print summary</button>
           <button className="px-3 py-1.5 rounded border border-red-300 bg-red-700 text-white font-semibold hover:bg-red-800 text-[13px]" data-testid="clear-all" onClick={clearAll}>Clear / Blank Workspace</button>
@@ -221,7 +249,7 @@ export function App() {
               {notes.map((n) => <span key={n} className="text-xs text-steel-500">· {n}</span>)}
               <button className="btn-p ml-auto" data-testid="open-wizard-header" onClick={() => setWizardOpen(true)}>Auto-Fill Gaps Wizard</button>
               <button className="btn-p" data-testid="export-gaps" disabled={!checks.issues.length} onClick={() => void exportGaps()}>Export Gaps (.xlsx)</button>
-              <button className="btn" data-testid="import-gaps" onClick={() => gapRef.current?.click()}>Import Filled Gaps (.xlsx)</button>
+              <button className="btn" data-testid="import-gaps" onClick={() => void pickAndImportGaps()}>Import Filled Gaps (.xlsx)</button>
               <button className="btn" onClick={() => setGapOpen(!gapOpen)}>{gapOpen ? 'Hide list' : 'Show list'}</button>
             </div>
             {gapOpen && <ul className="mt-2 max-h-44 overflow-auto divide-y divide-steel-100 border border-steel-200 rounded" data-testid="gap-list">

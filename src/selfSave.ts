@@ -2,8 +2,7 @@
  * Self-contained "Save App + Data (.html)": the whole master workspace is written into the page's own
  * <script id="embedded-master-state" type="application/json"> tag, so one .html file carries the app and its data.
  */
-import { readCachedSession, serialise } from './persist';
-import type { FsHandle } from './persist';
+import { fsSupported, pickSaveFile, readCachedSession, serialise, writeHandle } from './persist';
 import type { Model } from './engine/types';
 
 export const EMBEDDED_ID = 'embedded-master-state';
@@ -49,13 +48,13 @@ export function currentPageWithData(model: Model, placeholderHtml: string): stri
   return injectEmbeddedState('<!doctype html>\n' + copy.outerHTML, model);
 }
 
-type PickerWindow = Window & { showSaveFilePicker?: (o: unknown) => Promise<FsHandle> };
-/** Saves via the File System Access API (with the requested options) or an <a download> fallback. Returns false when the user cancels. */
+/** Saves via the File System Access API (shared folder id) or an <a download> fallback. Returns false when the user cancels. */
 export async function saveHtml(html: string, download: (name: string, data: BlobPart, type: string) => void): Promise<boolean> {
-  const picker = (window as PickerWindow).showSaveFilePicker;
-  if (typeof picker !== 'function') { download(SELF_SAVE_NAME, html, 'text/html'); return true; }
+  if (!fsSupported()) { download(SELF_SAVE_NAME, html, 'text/html'); return true; }
   try {
-    const handle = await picker.call(window, { suggestedName: SELF_SAVE_NAME, id: 'factory-hub-self-save', types: [{ description: 'Self-Contained HTML App', accept: { 'text/html': ['.html'] } }] });
-    const writer = await handle.createWritable(); await writer.write(html); await writer.close(); return true;
+    const h = await pickSaveFile(SELF_SAVE_NAME, 'Self-Contained HTML App', { 'text/html': ['.html'] });
+    if (h === null) return false;
+    await writeHandle(h, html);
+    return true;
   } catch (e) { if ((e as Error).name === 'AbortError') return false; throw e; }
 }
