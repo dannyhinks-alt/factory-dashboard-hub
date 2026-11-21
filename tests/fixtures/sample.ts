@@ -8,7 +8,7 @@ const A = (factory: string, cell: string, asset: string, complexity: string, shi
   const hasP = pOee !== null || pLoad !== null;
   return { id: `A${++n}`, factory, cell, asset, note: '', demand: null, complexity, shift, machines, oee: oee ?? pOee, plannedLosses: null, loadHrs: load,
     modelShift: shift, modelOee: oee, modelPlannedLosses: null, modelLoad: load, passportShift: hasP ? shift : '', passportOee: pOee, passportPlannedLosses: null, passportLoadHrs: pLoad, passportUtilisation: null, operationQty: null,
-    costPerMachine: cost, spacePerMachine: space, costUncPct: unc, vaPct: va, envaPct: enva, inspectionHrs: null };
+    costPerMachine: cost, installCostPerMachine: null, spacePerMachine: space, costUncPct: unc, costNote: '', vaPct: va, envaPct: enva, inspectionHrs: null };
 };
 
 export function demoModel(): Model {

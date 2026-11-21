@@ -18,13 +18,13 @@ describe('Gap Auto-Fill Wizard', () => {
     const s = scanGaps(blanky(), ALL); expect(s.factories).toEqual(['HT']); expect(s.shiftAssets.length).toBe(2); expect(s.complexityAssets.length).toBe(1); expect(s.oeeAssets.length).toBe(1);
     const dpf = scanGaps(blanky(), { factory: 'DPF' }); expect(dpf.factories).toEqual([]); expect(dpf.shiftAssets.length).toBe(1);
   });
-  it('defaults: 48 weeks, 2 Shifts, Standard ticked; Global OEE 70% ticked', () => { expect(DEFAULT_RULES).toEqual({ plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Standard' }, oee: { on: true, fraction: 0.70 } }); });
+  it('defaults: 48 weeks, 2 Shifts, Complex ticked; Global OEE 70% ticked', () => { expect(DEFAULT_RULES).toEqual({ plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Complex' }, oee: { on: true, fraction: 0.70 } }); });
   it('fills only ticked rules, only blanks, and records provenance with labels', () => {
     const m = blanky(); const before = structuredClone(m); const rep = applyWizard(m, ALL, DEFAULT_RULES);
     expect(rep).toMatchObject({ plannedWeeks: 1, shift: 2, complexity: 1, oee: 1, total: 5 });
-    expect(m.settings.plannedWeeks.HT).toBe(48); expect(m.settings.plannedWeeks.DPF).toBe(46); expect(m.assets[0].shift).toBe('2 Shifts'); expect(m.assets[0].modelShift).toBe('2 Shifts'); expect(m.assets[1].complexity).toBe('Standard');
+    expect(m.settings.plannedWeeks.HT).toBe(48); expect(m.settings.plannedWeeks.DPF).toBe(46); expect(m.assets[0].shift).toBe('2 Shifts'); expect(m.assets[0].modelShift).toBe('2 Shifts'); expect(m.assets[1].complexity).toBe('Complex');
     expect(m.assets[2].oee).toBe(0.70); expect(m.assets[2].modelOee).toBe(0.70); expect(m.assets[4].shift).toBe(before.assets[4].shift); // typed values are never overwritten
-    expect(m.assumedFields).toEqual({ [factoryKey('HT')]: 'Wizard default (48 wks)', [assetKey(m.assets[0].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[3].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[1].id, 'complexity')]: 'Wizard default (Standard)', [assetKey(m.assets[2].id, 'oee')]: 'Wizard default (70% OEE)' });
+    expect(m.assumedFields).toEqual({ [factoryKey('HT')]: 'Wizard default (48 wks)', [assetKey(m.assets[0].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[3].id, 'shift')]: 'Wizard default (2 Shifts)', [assetKey(m.assets[1].id, 'complexity')]: 'Wizard default (Complex — 50% limit)', [assetKey(m.assets[2].id, 'oee')]: 'Wizard default (70% OEE)' });
   });
   it('OEE fills blank OEE at the configured fraction and is labelled', () => { const m = blanky(); applyWizard(m, ALL, { ...DEFAULT_RULES, oee: { on: true, fraction: 0.85 } }); expect(m.assets[2].oee).toBe(0.85); expect(m.assets[2].modelOee).toBe(0.85); expect(m.assumedFields[assetKey(m.assets[2].id, 'oee')]).toBe('Wizard default (85% OEE)'); });
   it('is idempotent: a second run fills nothing (all 5 fields already filled)', () => { const m = blanky(); applyWizard(m, ALL, DEFAULT_RULES); expect(applyWizard(m, ALL, DEFAULT_RULES).total).toBe(0); });

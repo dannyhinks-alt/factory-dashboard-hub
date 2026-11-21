@@ -39,7 +39,8 @@ console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe
   await page.getByTestId('ws-2').click();
   ok((await page.getByLabel('Asset filter').locator('option').count()) === 1, 'empty workbook has 0 assets');
   await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'empty workbook has 0 FPDs');
-  await page.getByTestId('ws-4').click(); ok((await page.getByTestId('active-cell-badge').innerText()).includes('All cells'), 'empty workbook has no assessed cells');
+  await page.getByTestId('ws-4').click(); ok(await page.getByTestId('gp-onboarding').isVisible(), 'empty workbook: Gate & Passport Status shows onboarding');
+  await page.getByTestId('ws-5').click(); ok((await page.getByTestId('active-cell-badge').innerText()).includes('All cells'), 'empty workbook has no assessed cells');
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
   ok(await page.getByTestId('dropzone').isVisible(), 'Clear / Blank Workspace returns to blank start');
   await loadSample(page);
@@ -136,7 +137,7 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   ok(await page.getByTestId('cycle-alert').isVisible(), 'circular loop detected');
   await page.screenshot({ path: 'e2e/out/flow.png', fullPage: true });
   await last.getByLabel('Delete link').click();
-  await page.getByTestId('ws-4').click();
+  await page.getByTestId('ws-5').click();
   ok(await page.getByTestId('lever-Set A').isVisible(), 'Set A/B/C lever tester');
   ok((await page.getByTestId('gate-status-Design').innerText()).includes('BLOCKED (HS&E)'), 'Design gate BLOCKED (HS&E)');
   ok(await page.getByTestId('overdue').first().isVisible(), 'overdue action flagged');
@@ -171,8 +172,8 @@ console.log('5. Partial .xlsx ingestion, then re-import of the export');
   await page.getByTestId('gap-item').filter({ hasText: 'is not one of the complexity classes' }).first().click();
   await page.getByLabel('Complexity of Furnace').selectOption('Precision');
   ok((await page.getByLabel('Complexity of Furnace').inputValue()) === 'Precision', 'dropdown gap-fill');
-  for (const n of [1, 2, 3, 4]) { await page.getByTestId(`ws-${n}`).click(); }
-  ok(true, 'all 4 workspaces render on partial data');
+  for (const n of [1, 2, 3, 4, 5]) { await page.getByTestId(`ws-${n}`).click(); }
+  ok(true, 'all 5 workspaces render on partial data');
   await page.evaluate(() => { delete window.showSaveFilePicker; }); // force download fallback — no picker mock in this section
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export .xlsx' }).click()]);
   await dl.saveAs('e2e/out/partial-export.xlsx');
@@ -219,8 +220,8 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
 {
   const { ctx, page, errors } = await fresh();
   await loadSample(page);
-  ok((await page.locator('nav[aria-label=Workspaces] button').count()) === 4, 'navigation has exactly 4 workspaces');
-  ok(['1. Overall Status', '2. Data & Gap Filler', '3. Product Flow (FPD)', '4. Gates, Scenarios & Register'].every(async () => true) && (await page.getByTestId('ws-3').innerText()).includes('Product Flow (FPD)'), 'workspace names');
+  ok((await page.locator('nav[aria-label=Workspaces] button').count()) === 5, 'navigation has exactly 5 workspaces');
+  ok(['1. Overall Status', '2. Data & Gap Filler', '3. Product Flow (FPD)', '4. Gate & Passport Status', '5. Scenarios & Register'].every(async () => true) && (await page.getByTestId('ws-3').innerText()).includes('Product Flow (FPD)') && (await page.getByTestId('ws-4').innerText()).includes('Gate & Passport') && (await page.getByTestId('ws-5').innerText()).includes('Scenarios & Register'), 'workspace names');
   // programme name: editable, persisted
   await page.getByTestId('programme-name').fill('Alpha programme');
   await page.reload(); ok((await page.getByTestId('programme-name').inputValue()) === 'Alpha programme', 'programme name persisted in localStorage');
@@ -273,7 +274,7 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
   await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
   await page.getByLabel('Delete FPD-X1').click(); ok((await page.getByLabel('Name of FPD-X1').count()) === 0, 'FPD row delete');
   // gates
-  await page.getByTestId('ws-4').click();
+  await page.getByTestId('ws-5').click();
   ok(await page.getByTestId('assessor-help').isVisible(), 'What this screen does banner');
   await page.getByTestId('add-all-cells').click();
   ok(await page.getByTestId('add-all-cells').isDisabled(), '+ Add All Workbook Cells adds every cell (DC16 resolved)');
@@ -284,9 +285,9 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
   { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Factory', 'Cell', 'Asset'], ['HT', 'C1', 'Oven']]), 'Data');
     await page.getByTestId('xlsx-input').setInputFiles({ name: 'nolevers.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })) }); }
-  await page.getByTestId('ws-4').click();
+  await page.getByTestId('ws-5').click();
   ok((await page.getByLabel('Set A name').inputValue()) === 'Set A — OEE & Method Uplift' && (await page.getByLabel('Set B shift').inputValue()) === '3 Shifts' && (await page.getByLabel('Set C machines added').inputValue()) === '1', 'Set A/B/C are pre-loaded with the presets');
-  await loadSample(page); await page.getByTestId('ws-4').click();
+  await loadSample(page); await page.getByTestId('ws-5').click();
   await page.getByLabel('Set A quick preset').selectOption('Stress Test (+20% Demand)');
   ok((await page.getByLabel('Set A load change').inputValue()) === '20', 'quick preset fills the levers');
   await page.getByLabel('Set A quick preset').selectOption('Reset to 0'); ok((await page.getByLabel('Set A load change').inputValue()) === '0', 'Reset to 0');
@@ -308,7 +309,7 @@ for (const [name, cached, expect_] of [
   await page.waitForTimeout(300);
   const app = await page.getByTestId('gap-panel').count() > 0, blank = await page.getByTestId('dropzone').count() > 0;
   ok(expect_ === 'app' ? app : blank, `${name}: ${expect_ === 'app' ? 'loads as a normal workspace' : 'falls back to the blank start screen'}`);
-  if (app) { for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click(); ok(true, `${name}: all 4 workspaces render`); }
+  if (app) { for (const n of [1, 2, 3, 4, 5]) await page.getByTestId(`ws-${n}`).click(); ok(true, `${name}: all 5 workspaces render`); }
   ok(errors.length === 0 && (await page.locator('#boot-error').count()) === 0, `${name}: zero console errors` + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }
@@ -316,8 +317,8 @@ for (const [name, cached, expect_] of [
   const { ctx, page, errors } = await fresh();
   await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
   ok(await page.getByTestId('empty-onboarding').isVisible(), 'blank workspace shows an onboarding prompt');
-  for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click();
-  ok(errors.length === 0, 'blank workspace: all 4 workspaces render with zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  for (const n of [1, 2, 3, 4, 5]) await page.getByTestId(`ws-${n}`).click();
+  ok(errors.length === 0, 'blank workspace: all 5 workspaces render with zero console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await ctx.close();
 }
 
@@ -364,7 +365,7 @@ console.log('9. Overall Combined card, compact charts, dense Data table, tooltip
   const { ctx, page, errors } = await fresh();
   ok((await page.evaluate(() => localStorage.length)) === 0, 'first boot: nothing cached');
   await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
-  for (const [n, id] of [[1, 'empty-onboarding'], [2, 'data-onboarding'], [4, 'gov-onboarding']]) { await page.getByTestId(`ws-${n}`).click(); ok(await page.getByTestId(id).isVisible(), `workspace ${n} shows its onboarding prompt`); }
+  for (const [n, id] of [[1, 'empty-onboarding'], [2, 'data-onboarding'], [4, 'gp-onboarding'], [5, 'gov-onboarding']]) { await page.getByTestId(`ws-${n}`).click(); ok(await page.getByTestId(id).isVisible(), `workspace ${n} shows its onboarding prompt`); }
   await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'workspace 3 shows its onboarding prompt');
   ok(errors.length === 0, 'blank workspace: zero console errors'); await ctx.close();
 }
@@ -373,7 +374,7 @@ console.log('9. Overall Combined card, compact charts, dense Data table, tooltip
   const { ctx, page, errors } = await fresh();
   const legacy = { model: { assets: [{ id: 'A1', factory: 'XX', cell: 'C1', asset: 'Mill', shift: '2 Shifts', machines: 2, oee: 0.7, loadHrs: 900 }], settings: {} } };
   await page.getByTestId('json-input').setInputFiles({ name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(legacy)) }); await page.getByTestId('gap-panel').waitFor();
-  for (const n of [1, 2, 3, 4]) await page.getByTestId(`ws-${n}`).click();
+  for (const n of [1, 2, 3, 4, 5]) await page.getByTestId(`ws-${n}`).click();
   ok(errors.length === 0, 'legacy JSON imports and every screen renders'); await ctx.close();
 }
 
@@ -480,7 +481,7 @@ console.log('13. Gap Auto-Fill & Review Wizard');
   await page.getByTestId('open-wizard-data').click();
   const scan = await page.getByTestId('wizard-scan').innerText(); ok(/blank Planned Weeks\s*1/.test(scan) && /blank Shift Pattern\s*2/.test(scan) && /blank Complexity Class\s*1/.test(scan) && /blank OEE \(%\)\s*1/.test(scan), 'step 1 shows live blank counts');
   await page.getByTestId('wizard-next').click();
-  ok((await page.getByTestId('autofill-wizard').getByLabel('Default planned weeks').inputValue()) === '48' && (await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').inputValue()) === '2 Shifts' && (await page.getByTestId('autofill-wizard').getByLabel('Default complexity class').inputValue()) === 'Standard' && (await page.getByTestId('autofill-wizard').getByLabel('Default baseline OEE').inputValue()) === '70', 'step 2 defaults: 48 weeks, 2 Shifts, Standard, 70%');
+  ok((await page.getByTestId('autofill-wizard').getByLabel('Default planned weeks').inputValue()) === '48' && (await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').inputValue()) === '2 Shifts' && (await page.getByTestId('autofill-wizard').getByLabel('Default complexity class').inputValue()) === 'Complex' && (await page.getByTestId('autofill-wizard').getByLabel('Default baseline OEE').inputValue()) === '70', 'step 2 defaults: 48 weeks, 2 Shifts, Complex, 70%');
   ok((await page.getByTestId('autofill-wizard').getByLabel('Fill Planned Weeks').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Shift Pattern').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Complexity Class').isChecked()) && (await page.getByTestId('autofill-wizard').getByLabel('Fill Baseline OEE').isChecked()), 'all four rules ticked by default (Global OEE 70% now on)');
   ok((await page.getByTestId('autofill-wizard').getByLabel('Default shift pattern').locator('option').allInnerTexts()).includes('Continuous 24/7'), 'shift dropdown lists valid shifts');
   await page.getByTestId('wizard-next').click(); ok(/1 factory planned-weeks value → 48 weeks/.test(await page.getByTestId('wizard-plan').innerText()) && /1 OEE value/.test(await page.getByTestId('wizard-plan').innerText()), 'step 3 previews what will be applied (incl. OEE)');

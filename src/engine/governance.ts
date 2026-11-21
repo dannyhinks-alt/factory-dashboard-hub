@@ -1,8 +1,19 @@
-import { GATES, HSE_THEMES, THEMES } from './constants';
+import { GATES, GP_THEME_NUMS, HSE_THEMES, THEMES } from './constants';
 import type { Model, RegItem } from './types';
 
 /** Ratings are per cell when a cell is given; the programme-level (all cells) rating uses the bare gate|theme key. */
 export const ratingKey = (g: string, t: number, cell = '') => (cell ? `${cell}::${g}|${t}` : `${g}|${t}`);
+/** Gate & Passport Status rating key: always per-cell. */
+export const gpRatingKey = (cell: string, gate: string, themeNo: number) => `${cell}|${gate}|${themeNo}`;
+export const gpDateKey = (cell: string, gate: string) => `${cell}|${gate}`;
+
+export interface GpGateStatus { gate: string; met: number; label: string }
+export function gpGateStatus(m: Model, cell: string, gate: string): GpGateStatus {
+  const met = GP_THEME_NUMS.filter((t) => m.assessor.gpRatings[gpRatingKey(cell, gate, t)] === 'Met').length;
+  const rated = GP_THEME_NUMS.filter((t) => !!m.assessor.gpRatings[gpRatingKey(cell, gate, t)]).length;
+  const label = rated === 0 ? 'NOT STARTED' : met === GP_THEME_NUMS.length ? `PASSED ${met}/${GP_THEME_NUMS.length}` : 'IN PROGRESS';
+  return { gate, met, label };
+}
 export interface GateStatus { gate: string; met: number; partial: number; notMet: number; unrated: number; blocked: boolean; evidence: number; maturity: number; label: string }
 
 export function gateStatus(m: Model, gate: string, cell = ''): GateStatus {

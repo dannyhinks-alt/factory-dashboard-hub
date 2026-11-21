@@ -6,6 +6,9 @@ export const DEFAULT_SHIFT_HOURS: Record<string, number> = {
   '1 Shift': 40, '2 Shifts': 80, '3 Shifts': 120, '4 Shifts': 160, '5 Shifts': 200, '6 Shifts': 240, 'Continuous 24/7': 168, '2 Shifts + Sat': 90, '3 Shifts + Sat': 130,
 };
 export const GATES = ['Define', 'Concept', 'Design', 'Prove', 'Launch', 'Consolidation'] as const;
+export const GP_GATES = ['Define', 'Concept', 'Design', 'Prove'] as const;
+export const GP_THEME_NUMS = [1, 2, 3, 4, 6] as const;
+export const GP_THEMES: Record<number, string> = { 1: 'Goals and scope', 2: 'Product families and process routes defined', 3: 'Utilisation assessed', 4: 'Value-add attributes assigned', 6: 'People' };
 export const THEMES = [
   'Demand & Product Family Definition', 'Capacity & OEE Evidence', 'HS&E: Hazards & Controls', 'Layout & Space',
   'People, Skills & Shift Pattern', 'Cost & Investment Case', 'HS&E: Verification & Sign-off',

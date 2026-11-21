@@ -47,10 +47,10 @@ export function scanGaps(m: Model, scope: WizardScope): GapScan {
 export interface WizardRules {
   plannedWeeks: { on: boolean; weeks: number };
   shift: { on: boolean; pattern: string };
-  complexity: { on: boolean; className: string };
+  complexity: { on: boolean; className: string; overrideStandard?: boolean };
   oee: { on: boolean; fraction: number };
 }
-export const DEFAULT_RULES: WizardRules = { plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Standard' }, oee: { on: true, fraction: 0.70 } };
+export const DEFAULT_RULES: WizardRules = { plannedWeeks: { on: true, weeks: 48 }, shift: { on: true, pattern: '2 Shifts' }, complexity: { on: true, className: 'Complex' }, oee: { on: true, fraction: 0.70 } };
 
 export interface WizardReport { plannedWeeks: number; shift: number; complexity: number; oee: number; total: number }
 /** Applies only the ticked rules, only to blank fields in scope, and records each one in assumedFields. Mutates `d`. */
@@ -59,7 +59,13 @@ export function applyWizard(d: Model, scope: WizardScope, rules: WizardRules): W
   if (rules.plannedWeeks.on && rules.plannedWeeks.weeks > 0) for (const f of scan.factories) { d.settings.plannedWeeks[f] = rules.plannedWeeks.weeks; d.assumedFields[factoryKey(f)] = `Wizard default (${rules.plannedWeeks.weeks} wks)`; rep.plannedWeeks++; }
   const byId = (ids: string[]) => d.assets.filter((a) => ids.includes(a.id));
   if (rules.shift.on && rules.shift.pattern) for (const a of byId(scan.shiftAssets)) { a.shift = rules.shift.pattern; a.modelShift = rules.shift.pattern; d.assumedFields[assetKey(a.id, 'shift')] = `Wizard default (${rules.shift.pattern})`; rep.shift++; }
-  if (rules.complexity.on && rules.complexity.className) for (const a of byId(scan.complexityAssets)) { a.complexity = rules.complexity.className; d.assumedFields[assetKey(a.id, 'complexity')] = `Wizard default (${rules.complexity.className})`; rep.complexity++; }
+  if (rules.complexity.on && rules.complexity.className) {
+    const lim = rules.complexity.className === 'Complex' ? ' — 50% limit' : '';
+    for (const a of byId(scan.complexityAssets)) { a.complexity = rules.complexity.className; d.assumedFields[assetKey(a.id, 'complexity')] = `Wizard default (${rules.complexity.className}${lim})`; rep.complexity++; }
+    if (rules.complexity.overrideStandard && rules.complexity.className === 'Complex') {
+      for (const a of d.assets.filter((x) => inScope(scope, x.factory) && x.complexity === 'Standard')) { a.complexity = 'Complex'; d.assumedFields[assetKey(a.id, 'complexity')] = `Wizard default (Complex — 50% limit)`; rep.complexity++; }
+    }
+  }
   if (rules.oee.on && rules.oee.fraction > 0 && rules.oee.fraction <= 1.2) for (const a of byId(scan.oeeAssets)) { a.oee = rules.oee.fraction; a.modelOee = rules.oee.fraction; d.assumedFields[assetKey(a.id, 'oee')] = `Wizard default (${Math.round(rules.oee.fraction * 1000) / 10}% OEE)`; rep.oee++; }
   rep.total = rep.plannedWeeks + rep.shift + rep.complexity + rep.oee; return rep;
 }

@@ -39,10 +39,11 @@ src/
     sensitivity.ts factoryScenarioDelta, assetScenario, pressureList, testSets
     types.ts       Model, Asset, CellLine, Scenario, LeverSet, … (source of truth)
   ui/              React components
-    WsData.tsx     Dense data-entry table
-    WsDashboard.tsx Dashboard cards, UtilBars
+    WsData.tsx        Dense data-entry table
+    WsDashboard.tsx   Dashboard cards, UtilBars
     WsSensitivity.tsx Sensitivity / Scenario tab incl. AssetPlanner & factory scenario
-    charts.tsx     UtilBars, Ring, HBars, Seg, etc.
+    WsGatePassport.tsx  Tab 4 — Gate & Passport Status (5-theme GP assessor)
+    charts.tsx        UtilBars, Ring, HBars, Seg, etc.
   persist.ts       serialise / deserialise / readCachedSession
   selfSave.ts      injectEmbeddedState / pickBootState
 tests/             Vitest unit tests
@@ -61,12 +62,13 @@ vite.offline.config.ts  Custom offline build plugin (IIFE, inlined assets)
 export const DEFAULT_RULES: WizardRules = {
   plannedWeeks:  { on: true, weeks: 48 },
   shift:         { on: true, pattern: '2 Shifts' },
-  complexity:    { on: true, className: 'Standard' },
+  complexity:    { on: true, className: 'Complex' },
   oee:           { on: true, fraction: 0.70 },   // 70 % on by default
 };
 ```
 
-All four rules are **on by default**. OEE default is **70 %** (not 85 %).
+All four rules are **on by default**. OEE default is **70 %** (not 85 %). Complexity default is **Complex** (50 % limit).  
+Assumed label for Complex: `'Wizard default (Complex — 50% limit)'`.
 
 ### VA / ENVA / NVA (`vaPct`, `envaPct`)
 
@@ -77,6 +79,30 @@ All four rules are **on by default**. OEE default is **70 %** (not 85 %).
 
 - DC05 must **not** flag a cell-level demand gap when any asset in that cell already has demand typed.
 - `cellRow` in `gaps.ts` must receive the full `Model` as its first argument and perform the same check.
+
+### Tab numbering
+
+| # | Name |
+|---|------|
+| 1 | Overall Status |
+| 2 | Data & Gap Filler |
+| 3 | Product Flow (FPD) |
+| 4 | Gate & Passport Status |
+| 5 | Scenarios & Register |
+
+### Gate & Passport Status tab (`src/ui/WsGatePassport.tsx`)
+
+- Shows a unified table: Cell ID × Gate (Define / Concept / Design / Prove).
+- 5 GP themes: **1** Goals and scope, **2** Product families and process routes defined, **3** Utilisation assessed, **4** Value-add attributes assigned, **6** People (each `Met / Partial / Not met`).
+- Gate status computed by `gpGateStatus(m, cell, gate)` in `src/engine/governance.ts`: `PASSED 5/5 / IN PROGRESS / NOT STARTED`.
+- Ratings stored in `m.assessor.gpRatings` keyed `${cell}|${gate}|${themeNo}` via `gpRatingKey()`.
+- Date Reviewed and Headline Note stored in `m.assessor.gpDateReviewed` / `m.assessor.gpHeadlineNote` keyed `${cell}|${gate}` via `gpDateKey()`.
+- Export Gaps `SHEET_GATES` tab uses GATE_COLS = `['Cell ID', 'Gate', 'Status', 'Date Reviewed', 'Theme 1: ...', ..., 'Headline Note']`.
+- `gateRows(m, factory)` returns `{ cell, gate }[]` rows for every cell × gate pair that still has at least one missing theme rating.
+
+### Cell Summary Strip (WsData.tsx)
+
+Each cell summary row is rendered as a **tinted group banner** (`background: #f1f5f9; border-left: 3px solid #2563eb`) spanning all asset columns (`colSpan={21}`). The Cell Summary Strip (VA h, ENVA h, NVA h, Inspection h, Extra footprint, Ops h, Lean h, Footprint) is an independent inline section within that banner — never placed inside asset-level columns.
 
 ### UtilBars (`src/ui/charts.tsx`)
 

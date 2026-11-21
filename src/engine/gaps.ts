@@ -5,11 +5,11 @@
  */
 import ExcelJS from 'exceljs/dist/exceljs.bare.min.js';
 import * as XLSX from 'xlsx';
-import { SHIFTS, GATES, THEMES } from './constants';
+import { SHIFTS, GP_GATES, GP_THEME_NUMS, GP_THEMES } from './constants';
 import { normalisePct, shiftHoursFor } from './calc';
 import { PLAIN } from './plainEnglish';
 import { issueFactories } from './overview';
-import { ratingKey } from './governance';
+import { gpRatingKey, gpDateKey } from './governance';
 import type { Asset, CellLine, Fpd, Issue, Model, Rating, Severity } from './types';
 
 export const SHEET_OVERVIEW = 'Overview & Instructions';
@@ -26,10 +26,10 @@ const key = (s: unknown) => String(s ?? '').toLowerCase().replace(/\([^)]*\)?/g,
 export const CELL_COLS = ['Factory', 'Cell ID', 'Cell Name', 'Asset', 'Severity', 'What Is Missing', 'Shift Pattern', 'Complexity', 'Machines', 'OEE (%)', 'Actual Load (hrs/yr)', 'Planned Losses (hrs/yr)', 'Demand (units/yr)', 'VA (hrs)', 'ENVA (hrs)', 'NVA (hrs)', 'Inspection (hrs)', 'CapEx (£)', 'Footprint (m²)', 'Passport Version', 'Passport Date'] as const;
 type Col = typeof CELL_COLS[number];
 export const FPD_COLS = ['FPD ID', 'Severity', 'What Is Missing', 'Name', 'Route Cells', 'Hours', 'Volume', 'Working hrs/day', 'Version', 'Date'] as const;
-export const GATE_COLS = ['Cell ID', 'Theme No', 'Theme', ...GATES] as const;
+export const GATE_COLS = ['Cell ID', 'Gate', 'Status', 'Date Reviewed', ...GP_THEME_NUMS.map((n) => `Theme ${n}: ${GP_THEMES[n]}`), 'Headline Note'] as const;
 
 // ------------------------------------------------------------------ what each flagged rule makes the engineer fill
-const ASSET_FIELDS: Record<string, Col[]> = { DC21: ['Complexity'], DC10: ['Actual Load (hrs/yr)'], DC11: ['Actual Load (hrs/yr)'], DC12: ['Actual Load (hrs/yr)', 'OEE (%)'], DC13: ['OEE (%)'], DC30: ['Planned Losses (hrs/yr)'], DC31: ['CapEx (£)'], DC32: ['CapEx (£)'] };
+const ASSET_FIELDS: Record<string, Col[]> = { DC21: ['Complexity'], DC10: ['Actual Load (hrs/yr)'], DC11: ['Actual Load (hrs/yr)'], DC12: ['Actual Load (hrs/yr)', 'OEE (%)'], DC13: ['OEE (%)'], DC30: ['Planned Losses (hrs/yr)'] };
 const CELL_FIELDS: Record<string, Col[]> = { DC05: ['Demand (units/yr)'], DC09: ['Passport Version', 'Passport Date'], DC29: ['Inspection (hrs)', 'VA (hrs)'], DC33: ['Footprint (m²)'], DC34: ['Footprint (m²)'] };
 
 interface Row { factory: string; cellId: string; cellName: string; asset: string; sev: Severity; missing: string[]; vals: Partial<Record<Col, string | number>>; amber: Set<Col> }
@@ -81,9 +81,9 @@ export function fpdRows(m: Model, issues: Issue[]): FpdRow[] {
   });
 }
 
-export function gateRows(m: Model, factory: string): { cell: string; theme: number }[] {
+export function gateRows(m: Model, factory: string): { cell: string; gate: string }[] {
   const cells = [...new Set([...m.cellLines.map((c) => ({ c: c.cell, f: c.factory })), ...m.assets.map((a) => ({ c: a.cell, f: a.factory }))].filter((x) => x.c && (factory === 'All' || x.f === factory)).map((x) => x.c))].sort();
-  return cells.filter((c) => THEMES.some((_, t) => GATES.some((g) => !m.assessor.ratings[ratingKey(g, t + 1, c)]))).flatMap((c) => THEMES.map((_, t) => ({ cell: c, theme: t + 1 })));
+  return cells.flatMap((c) => GP_GATES.filter((g) => GP_THEME_NUMS.some((t) => !m.assessor.gpRatings[gpRatingKey(c, g, t)])).map((g) => ({ cell: c, gate: g })));
 }
 
 // ------------------------------------------------------------------ export
@@ -149,13 +149,22 @@ export async function buildGapWorkbook(m: Model, issues: Issue[], factory: strin
     FPD_COLS.forEach((h, ci) => { const c = fs.getRow(i + 2).getCell(ci + 1); c.value = vals[h] === '' ? null : vals[h]; paint(c, r.amber.has(h)); if (r.amber.has(h)) c.font = { bold: true, color: { argb: 'FF78350F' } }; });
   });
 
-  // ---- Tab 4: Gate readiness
-  const gs = wb.addWorksheet(SHEET_GATES); gs.columns = GATE_COLS.map((h) => ({ header: h, width: h === 'Theme' ? 38 : h === 'Cell ID' ? 26 : 16 })); styleHeader(gs, GATE_COLS.length);
+  // ---- Tab 4: Gate & Passport Status (GP schema: rows = cell × gate, columns = details + 5 themes)
+  const gs = wb.addWorksheet(SHEET_GATES); gs.columns = GATE_COLS.map((h) => ({ header: h, width: h.startsWith('Theme') ? 32 : h === 'Cell ID' ? 26 : h === 'Date Reviewed' ? 16 : h === 'Headline Note' ? 44 : 16 })); styleHeader(gs, GATE_COLS.length);
   gateRows(m, factory).forEach((r, i) => GATE_COLS.forEach((h, ci) => {
     const c = gs.getRow(i + 2).getCell(ci + 1);
-    if (h === 'Cell ID') c.value = r.cell; else if (h === 'Theme No') c.value = r.theme; else if (h === 'Theme') c.value = THEMES[r.theme - 1];
-    else { const v = m.assessor.ratings[ratingKey(h, r.theme, r.cell)]; c.value = v || null; c.dataValidation = { type: 'list', allowBlank: true, formulae: [ref(2, 3)], showErrorMessage: false }; paint(c, !v); if (!v) c.font = { bold: true, color: { argb: 'FF78350F' } }; return; }
-    paint(c, false);
+    if (h === 'Cell ID') { c.value = r.cell; paint(c, false); }
+    else if (h === 'Gate') { c.value = r.gate; paint(c, false); }
+    else if (h === 'Status') {
+      const met = GP_THEME_NUMS.filter((t) => m.assessor.gpRatings[gpRatingKey(r.cell, r.gate, t)] === 'Met').length;
+      const rated = GP_THEME_NUMS.filter((t) => !!m.assessor.gpRatings[gpRatingKey(r.cell, r.gate, t)]).length;
+      c.value = rated === 0 ? 'NOT STARTED' : met === GP_THEME_NUMS.length ? `PASSED ${met}/${GP_THEME_NUMS.length}` : 'IN PROGRESS'; paint(c, false);
+    } else if (h === 'Date Reviewed') { const v = m.assessor.gpDateReviewed[gpDateKey(r.cell, r.gate)] || null; c.value = v; paint(c, !v); if (!v) c.font = { bold: true, color: { argb: 'FF78350F' } }; }
+    else if (h === 'Headline Note') { c.value = m.assessor.gpHeadlineNote[gpDateKey(r.cell, r.gate)] || null; paint(c, false); }
+    else {
+      const tNum = parseInt(h.replace(/^Theme (\d+):.*/, '$1'));
+      if (tNum) { const v = m.assessor.gpRatings[gpRatingKey(r.cell, r.gate, tNum)] || null; c.value = v; c.dataValidation = { type: 'list', allowBlank: true, formulae: [ref(2, 3)], showErrorMessage: false }; paint(c, !v); if (!v) c.font = { bold: true, color: { argb: 'FF78350F' } }; }
+    }
   }));
   const buf = await wb.xlsx.writeBuffer(); return new Uint8Array(buf as ArrayBuffer);
 }
@@ -224,16 +233,20 @@ export function applyFilledGaps(d: Model, wb: XLSX.WorkBook): GapImportReport {
       if (n) { rep.fpdsPatched++; rep.fieldsUpdated += n; }
     }
   }
-  // ---- Gate Readiness Gaps
-  const g = table(sheetRows(wb, SHEET_GATES), 'Theme No');
+  // ---- Gate & Passport Status (GP schema)
+  const g = table(sheetRows(wb, SHEET_GATES), 'Gate');
   if (g) {
     rep.sheets.push(SHEET_GATES);
     for (const r of g.body) {
-      const cell = str(r[g.cols[key('Cell ID')] ?? -1]), th = Math.round(toNum(r[g.cols[key('Theme No')] ?? -1]) ?? 0); if (!cell || th < 1 || th > THEMES.length) continue; rep.rowsSeen++;
-      for (const gate of GATES) {
-        const raw = str(r[g.cols[key(gate)] ?? -1]).toLowerCase(); const v: Rating = raw === 'met' ? 'Met' : raw.startsWith('part') ? 'Partial' : raw.replace(/\s/g, '') === 'notmet' ? 'Not met' : '';
-        if (!v) continue; const k = ratingKey(gate, th, cell);
-        if (d.assessor.ratings[k] !== v) { d.assessor.ratings[k] = v; rep.ratingsSet++; rep.fieldsUpdated++; if (!d.assessor.cells.includes(cell)) d.assessor.cells.push(cell); }
+      const cell = str(r[g.cols[key('Cell ID')] ?? -1]), gate = str(r[g.cols[key('Gate')] ?? -1]); if (!cell || !gate) continue; rep.rowsSeen++;
+      const dk = gpDateKey(cell, gate);
+      const dtRaw = r[g.cols[key('Date Reviewed')] ?? -1]; const dt = typeof dtRaw === 'number' && dtRaw > 20000 ? new Date(Math.round((dtRaw - 25569) * 86400000)).toISOString().slice(0, 10) : str(dtRaw).slice(0, 10); if (dt && d.assessor.gpDateReviewed[dk] !== dt) { d.assessor.gpDateReviewed[dk] = dt; rep.fieldsUpdated++; }
+      const note = str(r[g.cols[key('Headline Note')] ?? -1]); if (note && d.assessor.gpHeadlineNote[dk] !== note) { d.assessor.gpHeadlineNote[dk] = note; rep.fieldsUpdated++; }
+      for (const tNum of GP_THEME_NUMS) {
+        const colIdx = Object.entries(g.cols).find(([k]) => k.startsWith(`theme${tNum}`))?.[1]; if (colIdx === undefined) continue;
+        const raw = str(r[colIdx]).toLowerCase(); const v: Rating = raw === 'met' ? 'Met' : raw.startsWith('part') ? 'Partial' : raw.replace(/\s/g, '') === 'notmet' ? 'Not met' : '';
+        if (!v) continue; const rk = gpRatingKey(cell, gate, tNum);
+        if (d.assessor.gpRatings[rk] !== v) { d.assessor.gpRatings[rk] = v; rep.ratingsSet++; rep.fieldsUpdated++; if (!d.assessor.cells.includes(cell)) d.assessor.cells.push(cell); }
       }
     }
   }

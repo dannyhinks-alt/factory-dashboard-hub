@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
 import { runChecks } from '../src/engine/checks';
 import { applyFilledGaps, buildGapWorkbook, cellAssetRows, CELL_COLS, FPD_COLS, gapFileName, GAP_SHEETS, looksLikeGapWorkbook, SHEET_CELLS, SHEET_FPD, SHEET_GATES, SHEET_OVERVIEW } from '../src/engine/gaps';
+import { gpRatingKey } from '../src/engine/governance';
 import { scopeChecks } from '../src/engine/overview';
 import { parseWorkbook } from '../src/engine/xlsx';
 import { demoModel } from './fixtures/sample';
@@ -90,10 +91,10 @@ describe('Import Filled Gaps (.xlsx)', () => {
   it('patches product-family gaps and gate ratings, adding rated cells to the Assessor', async () => {
     const m = m0(); m.assessor.cells = [];
     const wb = await fill(m, (x) => { const f = x.getWorksheet(SHEET_FPD)!; f.eachRow((r, n) => { if (n > 1 && r.getCell(1).value === 'FPD-02') { r.getCell(FPD_COLS.indexOf('Hours') + 1).value = 800; r.getCell(FPD_COLS.indexOf('Volume') + 1).value = 100; r.getCell(FPD_COLS.indexOf('Route Cells') + 1).value = '02_HTMF_UTAQW; 04_DPF_WELDG'; } if (n > 1 && r.getCell(1).value === 'FPD-04') r.getCell(FPD_COLS.indexOf('Name') + 1).value = 'Finish machining';});
-      const g = x.getWorksheet(SHEET_GATES)!; g.eachRow((r, n) => { if (n > 1 && r.getCell(1).value === '07_DPF_MACHN' && r.getCell(2).value === 3) { r.getCell(4).value = 'Met'; r.getCell(5).value = 'Partial'; } }); });
+      const g = x.getWorksheet(SHEET_GATES)!; g.eachRow((r, n) => { if (n > 1 && r.getCell(1).value === '07_DPF_MACHN') { if (r.getCell(2).value === 'Define') r.getCell(7).value = 'Met'; if (r.getCell(2).value === 'Concept') r.getCell(7).value = 'Partial'; } }); });
     const d = structuredClone(m); const rep = applyFilledGaps(d, wb);
     expect(d.fpds[1].hours).toBe(800); expect(d.fpds[1].volume).toBe(100); expect(d.fpds[3].name).toBe('Finish machining'); expect(d.fpds[1].route).toEqual(['02_HTMF_UTAQW', '04_DPF_WELDG']); expect(d.fpds[1].cell).toBe('02_HTMF_UTAQW');
-    expect(d.assessor.ratings['07_DPF_MACHN::Define|3']).toBe('Met'); expect(d.assessor.ratings['07_DPF_MACHN::Concept|3']).toBe('Partial'); expect(d.assessor.cells).toContain('07_DPF_MACHN'); expect(rep.ratingsSet).toBe(2); expect(rep.fpdsPatched).toBe(2);
+    expect(d.assessor.gpRatings[gpRatingKey('07_DPF_MACHN', 'Define', 3)]).toBe('Met'); expect(d.assessor.gpRatings[gpRatingKey('07_DPF_MACHN', 'Concept', 3)]).toBe('Partial'); expect(d.assessor.cells).toContain('07_DPF_MACHN'); expect(rep.ratingsSet).toBe(2); expect(rep.fpdsPatched).toBe(2);
   });
 });
 

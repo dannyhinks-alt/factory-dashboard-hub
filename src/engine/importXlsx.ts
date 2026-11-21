@@ -134,7 +134,7 @@ export function parseDataSheet(rows: Cell[][]): DataSheetResult {
       shift: mShift || pShift, machines: toNum(get(row, 'qtyModel')) ?? toNum(get(row, 'qtyPassport')), oee: mOee ?? pOee, plannedLosses: mPL ?? pPL, loadHrs: mLoad ?? pLoad,
       modelShift: mShift, modelOee: mOee, modelPlannedLosses: mPL, modelLoad: mLoad,
       passportShift: pShift, passportOee: pOee, passportPlannedLosses: pPL, passportLoadHrs: pLoad, passportUtilisation: frac(get(row, 'passportUtilisation')), operationQty: toNum(get(row, 'operationQty')),
-      costPerMachine: toNum(get(row, 'cost')), spacePerMachine: toNum(get(row, 'space')), costUncPct: frac(get(row, 'unc')), vaPct: frac(get(row, 'vaPct')), envaPct: frac(get(row, 'envaPct')), inspectionHrs: toNum(get(row, 'inspection')) });
+      costPerMachine: toNum(get(row, 'cost')), installCostPerMachine: toNum(get(row, 'installcost')), spacePerMachine: toNum(get(row, 'space')), costUncPct: frac(get(row, 'unc')), costNote: str(get(row, 'costnote')), vaPct: frac(get(row, 'vaPct')), envaPct: frac(get(row, 'envaPct')), inspectionHrs: toNum(get(row, 'inspection')) });
   }
   // A cell is a Passport cell when its flag says so, else when any of its asset lines carries Passport-block figures.
   if (cols.passportCell === undefined) out.cellLines.forEach((c) => { c.passport = out.assets.some((a) => a.cell === c.cell && (a.passportOee !== null || a.passportLoadHrs !== null || a.passportShift !== '')); });

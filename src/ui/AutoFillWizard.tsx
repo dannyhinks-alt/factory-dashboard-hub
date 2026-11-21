@@ -10,15 +10,18 @@ export function AutoFillWizard({ onClose }: { onClose: () => void }) {
   const { model, edit, filters, toast, asOf } = useApp();
   const scope = { factory: filters.factory };
   const [step, setStep] = useState(1);
-  const [rules, setRules] = useState<WizardRules>(DEFAULT_RULES);
+  const [rules, setRules] = useState<WizardRules>({ ...DEFAULT_RULES, complexity: { ...DEFAULT_RULES.complexity, overrideStandard: false } });
   const scan = useMemo(() => scanGaps(model, scope), [model, filters.factory]); // eslint-disable-line
   const rows: { label: string; n: number }[] = [
     { label: 'Factories with blank Planned Weeks', n: scan.factories.length }, { label: 'Assets with blank Shift Pattern', n: scan.shiftAssets.length },
     { label: 'Assets with blank Complexity Class', n: scan.complexityAssets.length }, { label: 'Assets with blank OEE (%)', n: scan.oeeAssets.length }];
   const total = rows.reduce((s, r) => s + r.n, 0);
+  const standardOverrideN = useMemo(() => rules.complexity.on && rules.complexity.overrideStandard && rules.complexity.className === 'Complex'
+    ? model.assets.filter((a) => (scope.factory === 'All' || a.factory === scope.factory) && a.complexity === 'Standard').length : 0,
+    [model, rules, scope.factory]); // eslint-disable-line
   const planned = {
     weeks: rules.plannedWeeks.on ? scan.factories.length : 0, shift: rules.shift.on ? scan.shiftAssets.length : 0,
-    complexity: rules.complexity.on ? scan.complexityAssets.length : 0, oee: rules.oee.on ? scan.oeeAssets.length : 0 };
+    complexity: rules.complexity.on ? scan.complexityAssets.length + standardOverrideN : 0, oee: rules.oee.on ? scan.oeeAssets.length : 0 };
   const plannedTotal = planned.weeks + planned.shift + planned.complexity + planned.oee;
   const set = <K extends keyof WizardRules>(k: K, v: Partial<WizardRules[K]>) => setRules((r) => ({ ...r, [k]: { ...r[k], ...v } }));
 
@@ -46,6 +49,7 @@ export function AutoFillWizard({ onClose }: { onClose: () => void }) {
           <label className="flex items-center gap-2"><input type="checkbox" aria-label="Fill Planned Weeks" checked={rules.plannedWeeks.on} onChange={(e) => set('plannedWeeks', { on: e.target.checked })} /><span className="w-64">Planned Weeks (per blank factory)</span><div className="w-24"><NumInput gap={false} label="Default planned weeks" value={rules.plannedWeeks.weeks} onChange={(v) => set('plannedWeeks', { weeks: v ?? 0 })} /></div><span className="text-xs text-slate-500">weeks</span></label>
           <label className="flex items-center gap-2"><input type="checkbox" aria-label="Fill Shift Pattern" checked={rules.shift.on} onChange={(e) => set('shift', { on: e.target.checked })} /><span className="w-64">Shift Pattern (per blank asset)</span><div className="w-44"><Sel label="Default shift pattern" gap={false} blank="" value={rules.shift.pattern} options={validShiftNames(model)} onChange={(v) => set('shift', { pattern: v })} /></div></label>
           <label className="flex items-center gap-2"><input type="checkbox" aria-label="Fill Complexity Class" checked={rules.complexity.on} onChange={(e) => set('complexity', { on: e.target.checked })} /><span className="w-64">Complexity Class (per blank asset)</span><div className="w-44"><Sel label="Default complexity class" gap={false} blank="" value={rules.complexity.className} options={Object.keys(model.settings.limits)} onChange={(v) => set('complexity', { className: v })} /></div></label>
+          {rules.complexity.on && rules.complexity.className === 'Complex' && <label className="ml-6 flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" aria-label="Override existing Standard cells to Complex" checked={!!rules.complexity.overrideStandard} onChange={(e) => set('complexity', { overrideStandard: e.target.checked })} />Override existing 'Standard (65%)' cells to 'Complex (50%)' (tracked as Assumed)</label>}
           <label className="flex items-center gap-2"><input type="checkbox" aria-label="Fill Baseline OEE" checked={rules.oee.on} onChange={(e) => set('oee', { on: e.target.checked })} /><span className="w-64">Baseline OEE % (per blank asset, optional)</span><div className="w-24"><NumInput pct gap={false} label="Default baseline OEE" value={rules.oee.fraction} onChange={(v) => set('oee', { fraction: v ?? 0 })} /></div><span className="text-xs text-slate-500">%</span></label></>}
         {step === 3 && <>
           <p className="text-slate-700">Ready to apply to blank fields only:</p>

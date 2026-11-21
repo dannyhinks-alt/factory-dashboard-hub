@@ -32,8 +32,10 @@ export interface Asset {
   passportUtilisation: number | null;
   operationQty: number | null;
   costPerMachine: number | null;
+  installCostPerMachine: number | null;
   spacePerMachine: number | null;
   costUncPct: number | null;
+  costNote: string;
   vaPct: number | null;
   envaPct: number | null;
   inspectionHrs: number | null; // must sit on the cell line, flagged if typed here
@@ -139,6 +141,9 @@ export interface Assessor {
   ratings: Record<string, Rating>; // `${gate}|${theme}`
   evidence: Record<string, boolean[]>; // gate -> 6 flags
   cells: string[]; // cells listed on the Assessor
+  gpRatings: Record<string, Rating>;      // `${cell}|${gate}|${themeNo}` — Gate & Passport Status tab
+  gpDateReviewed: Record<string, string>; // `${cell}|${gate}`
+  gpHeadlineNote: Record<string, string>; // `${cell}|${gate}`
 }
 
 export interface Model {
