@@ -121,6 +121,22 @@ Assumed label for Complex: `'Wizard default (Complex — 50% limit)'`.
 - Export Gaps `SHEET_GATES` tab uses GATE_COLS = `['Cell ID', 'Gate', 'Status', 'Date Reviewed', 'Theme 1: ...', ..., 'Headline Note']`.
 - `gateRows(m, factory)` returns `{ cell, gate }[]` rows for every cell × gate pair that still has at least one missing theme rating.
 
+### Gate Assessor Excel import (`src/engine/xlsx.ts`)
+
+- `parseWorkbook` detects a Gate Assessor sheet by **content**, not by name: scans all sheets for a header row containing `Gate` plus at least one GP theme anchor word (`goals and scope`, `utilisation assessed`, `people`). Leading theme numbers (`1.`, `2.`, etc.) are stripped before matching.
+- Columns parsed: Cell ID, Gate (matched case-insensitively against `GP_GATES`), 5 theme rating columns (Met / Partial / Not met), Date Reviewed (Excel serial, ISO, or UK `DD/MM/YYYY`), Headline Note.
+- Stored into `m.assessor.gpRatings` via `gpRatingKey(cell, gate, themeNo)`, `m.assessor.gpDateReviewed` and `m.assessor.gpHeadlineNote` via `gpDateKey(cell, gate)`.
+
+### Scenarios & Register tab (`src/ui/WsGovernance.tsx`)
+
+- **Legacy Gate Assessor Matrix removed.** The old 7-theme × 6-gate matrix (`Theme / Define / Concept / Design / Prove / Launch / Consolidation`) and Evidence Check table are gone from tab 5.
+- Tab 5 now contains only: a help banner directing users to tab 4 for gate assessments, the ROAA Register table, and the 10-Point Self-Test drawer.
+
+### File picker security fallback (`src/persist.ts`)
+
+- `pickOpenFile` throws `PickerUnavailableError` (name: `'PickerUnavailableError'`) when `SecurityError` / `NotAllowedError` is thrown by the browser (e.g. on `file://` origins). Callers in `App.tsx` catch this and fall back to `fileRef.current?.click()`.
+- `pickSaveFile` catches `SecurityError` / `NotAllowedError` and returns `null` (callers already fall back to `download()` when `null` is returned). `AbortError` is rethrown so callers can exit silently.
+
 ### Cell Summary Strip (WsData.tsx)
 
 Each cell summary row is rendered as a **tinted group banner** (`background: #f1f5f9; border-left: 3px solid #2563eb`) spanning all asset columns (`colSpan={18}`). The Cell Summary Strip (VA h, ENVA h, NVA h, Inspection h, Extra footprint, Ops h, Lean h, Footprint) is an independent inline section within that banner — never placed inside asset-level columns.
@@ -146,7 +162,7 @@ Each cell summary row is rendered as a **tinted group banner** (`background: #f1
 
 - Every `showOpenFilePicker` and `showSaveFilePicker` call passes `id: 'factory-hub-app-folder'` and `startIn: _lastHandle ?? 'desktop'`.
 - The module-level `_lastHandle` is updated after every picker resolves (open or save), so the browser remembers and opens the application folder each time.
-- `pickOpenFile(description, accept)` — returns `File | null` (null = API unavailable or user cancelled). Falls back to `<input type="file">` at the call site.
+- `pickOpenFile(description, accept)` — returns `File | null` (null = API unavailable or user cancelled). Throws `PickerUnavailableError` when the browser has the API but blocks it; callers catch and fall back to `<input type="file">` click.
 - `pickSaveFile(suggested, description, accept)` — returns `FsHandle | null` (null = API unavailable). Throws `AbortError` when user cancels; callers fall back to `download()` only when null is returned.
 
 ---

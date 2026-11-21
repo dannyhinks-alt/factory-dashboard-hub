@@ -127,13 +127,17 @@ export function App() {
   };
   const pickAndOpenXlsx = async () => {
     if (!fsOpenSupported()) { fileRef.current?.click(); return; }
-    const file = await pickOpenFile('Excel Workbook (.xlsx)', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xlsm'] });
-    if (file) void openXlsx(file);
+    try {
+      const file = await pickOpenFile('Excel Workbook (.xlsx)', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xlsm'] });
+      if (file) void openXlsx(file);
+    } catch (e) { if ((e as Error).name === 'PickerUnavailableError') { fileRef.current?.click(); } else throw e; }
   };
   const pickAndImportGaps = async () => {
     if (!fsOpenSupported()) { gapRef.current?.click(); return; }
-    const file = await pickOpenFile('Filled Gaps Workbook (.xlsx)', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] });
-    if (file) { try { importGaps(XLSX.read(await file.arrayBuffer(), { type: 'array' })); } catch (er) { setErr(`Could not read "${file.name}": ${(er as Error).message}`); } }
+    try {
+      const file = await pickOpenFile('Filled Gaps Workbook (.xlsx)', { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] });
+      if (file) { try { importGaps(XLSX.read(await file.arrayBuffer(), { type: 'array' })); } catch (er) { setErr(`Could not read "${file.name}": ${(er as Error).message}`); } }
+    } catch (e) { if ((e as Error).name === 'PickerUnavailableError') { gapRef.current?.click(); } else throw e; }
   };
   const openJson = async (file: File) => { try { load(deserialise(await file.text()), null, ['Loaded from auto-save file.']); } catch (e) { setErr((e as Error).message); } };
 
@@ -208,7 +212,7 @@ export function App() {
       {model && <div className="px-4 pb-2 flex flex-wrap items-center gap-3 text-white" data-testid="command-bar">
         <div data-testid="factory-filter"><Seg label="Global factory filter" value={filters.factory} options={['All', ...factoriesOf(model)]} onChange={(v) => setF((f) => ({ ...f, factory: v }))} /></div>
         <span data-testid="status-pill" data-verdict={status.verdict} className="px-3 py-1 rounded font-bold text-[13px]" style={{ background: VC[status.verdict] }}>Overall: {status.verdict} — {status.reason} <span className="font-normal opacity-90" data-testid="status-basis">· Basis: {status.basis}</span></span>
-        <span className="flex items-center gap-2 text-xs" data-testid="readiness" title="Share of the 34 Data Checks with no ERROR or WARN flag">
+        <span className="flex items-center gap-2 text-xs" data-testid="readiness" title="Share of the 32 Data Checks with no ERROR or WARN flag">
           <span>Data readiness</span><span className="inline-block w-32 h-2.5 rounded bg-slate-600 overflow-hidden"><span className="block h-full" style={{ width: `${ready.pct}%`, background: ready.errors ? '#D97706' : '#059669' }} /></span>
           <b data-testid="readiness-pct">{ready.pct}% complete</b><span className={ready.errors ? 'text-rose-300 font-semibold' : 'text-emerald-300'} data-testid="readiness-errors">{ready.errors} critical error{ready.errors === 1 ? '' : 's'} left</span></span>
       </div>}
@@ -247,7 +251,7 @@ export function App() {
             <div className="flex flex-wrap items-center gap-2">
               <b className="text-[14px]">Gap &amp; Action Summary</b><Info text="Every Data Check rule that has fired. Click an item to jump straight to the cell, asset, FPD, risk or setting to fix it." />
               {(['ERROR', 'WARN', 'INFO'] as Severity[]).map((s) => <button key={s} onClick={() => setSevFilter(sevFilter === s ? 'ALL' : s)} aria-pressed={sevFilter === s} data-testid={`sev-${s}`} className="chip" style={{ background: SEV_COL[s], opacity: sevFilter === 'ALL' || sevFilter === s ? 1 : 0.4 }}>{checks.counts[s]} {s}</button>)}
-              <span className="text-xs text-steel-500">34 rules checked · {checks.issues.length} flag(s)</span>
+              <span className="text-xs text-steel-500">32 rules checked · {checks.issues.length} flag(s)</span>
               {notes.map((n) => <span key={n} className="text-xs text-steel-500">· {n}</span>)}
               <button className="btn-p ml-auto" data-testid="open-wizard-header" onClick={() => setWizardOpen(true)}>Auto-Fill Gaps Wizard</button>
               <button className="btn-p" data-testid="export-gaps" disabled={!checks.issues.length} onClick={() => void exportGaps()}>Export Gaps (.xlsx)</button>
@@ -255,12 +259,12 @@ export function App() {
               <button className="btn" onClick={() => setGapOpen(!gapOpen)}>{gapOpen ? 'Hide list' : 'Show list'}</button>
             </div>
             {gapOpen && <ul className="mt-2 max-h-44 overflow-auto divide-y divide-steel-100 border border-steel-200 rounded" data-testid="gap-list">
-              {sorted.length === 0 && <li className="p-2 text-good font-semibold">No gaps found. All 34 Data Checks are clear.</li>}
+              {sorted.length === 0 && <li className="p-2 text-good font-semibold">No gaps found. All 32 Data Checks are clear.</li>}
               {sorted.map((i, k) => <li key={k}><div role="button" tabIndex={0} className="w-full text-left px-2 py-1 hover:bg-amber-50 flex gap-2 items-baseline cursor-pointer" data-testid="gap-item" onClick={() => i.target && goTo(i.target)} onKeyDown={(e) => e.key === 'Enter' && i.target && goTo(i.target)}>
                 <span className="chip shrink-0" style={{ background: SEV_COL[i.severity] }}>{i.severity}</span><span className="shrink-0 rounded bg-slate-100 text-slate-500 text-[10px] px-1 py-0.5 border border-slate-200" title={i.rule}>{i.rule}</span><span className="font-medium">{i.message}</span><span onClick={(e) => e.stopPropagation()}><Info text={RULES.find((r) => r.id === i.rule)?.help} term={RULES.find((r) => r.id === i.rule)?.plain} /></span>
                 {i.target && <span className="ml-auto text-accent shrink-0">Go to →</span>}</div></li>)}
             </ul>}
-            <details className="mt-2" data-testid="rules-table"><summary className="cursor-pointer text-xs font-semibold text-steel-700">All 34 Data Check rules{ruleFilter ? ` (filtered to ${ruleFilter})` : ''}</summary>
+            <details className="mt-2" data-testid="rules-table"><summary className="cursor-pointer text-xs font-semibold text-steel-700">All 32 Data Check rules{ruleFilter ? ` (filtered to ${ruleFilter})` : ''}</summary>
               <div className="max-h-56 overflow-auto border border-steel-200 rounded mt-1"><table className="w-full text-xs"><thead><tr><th className="th">#</th><th className="th">Severity</th><th className="th">Rule</th><th className="th">Where</th><th className="th">Flags</th></tr></thead><tbody>
                 {RULES.map((r, i) => <tr key={r.id} className={checks.perRule[r.id] ? 'bg-amber-50' : ''}><td className="td">{i + 1}</td><td className="td"><span className="chip" style={{ background: SEV_COL[r.severity] }}>{r.severity}</span></td><td className="td"><span className="font-medium">{r.plain}</span> <Info text={r.help} term={`${r.id}: ${r.plain}`} /><div className="text-[10px] text-slate-400">{r.title}</div></td><td className="td">{r.where}</td>
                   <td className="td"><button className="underline text-accent" disabled={!checks.perRule[r.id]} onClick={() => { setRuleFilter(ruleFilter === r.id ? '' : r.id); setGapOpen(true); }}>{checks.perRule[r.id]}</button></td></tr>)}</tbody></table></div></details>

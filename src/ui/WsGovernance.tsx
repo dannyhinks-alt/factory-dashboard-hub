@@ -1,44 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import { EVIDENCE, GATES, HSE_THEMES, REG_TYPES, THEMES } from '../engine/constants';
-import { allGates, isOverdue, level, ratingKey, score } from '../engine/governance';
+import { useMemo } from 'react';
+import { REG_TYPES } from '../engine/constants';
+import { isOverdue, level, score } from '../engine/governance';
 import { runSelfTest, TOL } from '../engine/selftest';
-import type { Rating, RegItem, RegType } from '../engine/types';
+import type { RegItem, RegType } from '../engine/types';
 import { useApp } from '../store';
-import { Card, FocusRow, NumInput, Sel, SourceBadge, Th, Toggle } from './kit';
+import { Card, FocusRow, NumInput, Sel, SourceBadge, Th } from './kit';
 
-const RC: Record<string, string> = { Met: '#1f8a4c', Partial: '#c98a00', 'Not met': '#c0392b', '': '#8a97a5' };
 const LC: Record<string, string> = { HIGH: '#c0392b', MEDIUM: '#c98a00', LOW: '#1f8a4c', UNSCORED: '#8a97a5' };
 
 export function WsGovernance() {
   const { model, edit, focus, asOf } = useApp();
-  const [active, setActive] = useState('');
-  const gates = allGates(model, active);
-  const workbookCells = [...new Set(model.cellLines.map((c) => c.cell).concat(model.assets.map((a) => a.cell)))].filter(Boolean);
-  useEffect(() => { if (focus?.kind === 'assessor' && model.assessor.cells.includes(focus.ref)) setActive(focus.ref); }, [focus]); // eslint-disable-line
-  const markMet = (g: string) => edit((d) => { THEMES.forEach((_, ti) => { d.assessor.ratings[ratingKey(g, ti + 1, active)] = 'Met'; }); });
   const upd = (i: number, fn: (r: RegItem) => void) => edit((d) => fn(d.register[i]));
   return <div className="grid gap-4">
     <section className="card accent-watch p-3" data-testid="assessor-help"><b>What this screen does</b>
-      <p className="mt-1 text-slate-700">Every cell is taken through six gates, <b>Define → Concept → Design → Prove → Launch → Consolidation</b>. At each gate you rate seven themes <i>Met</i>, <i>Partial</i> or <i>Not met</i>. Themes 3 and 7 are the health, safety and environment (HS&amp;E) sign-off: if either is <b>Not met</b>, that gate is locked as <b>BLOCKED (HS&amp;E)</b> and cannot pass. Then log risks and actions in the Register below.</p></section>
-
-    <section className="card p-3 flex flex-wrap items-center gap-3" data-testid="active-cell-bar">
-      <span className="text-xs font-semibold text-slate-600 uppercase">Active cell</span>
-      <span className="px-3 py-1 rounded font-bold text-white bg-sky-700 text-[14px]" data-testid="active-cell-badge">{active || 'All cells (programme level)'}</span>
-      <Sel label="Active cell" gap={false} blank="All cells (programme level)" value={active} options={model.assessor.cells} onChange={setActive} />
-      <button className="btn-p" data-testid="add-all-cells" disabled={workbookCells.every((c) => model.assessor.cells.includes(c))} onClick={() => edit((d) => { workbookCells.forEach((c) => { if (!d.assessor.cells.includes(c)) d.assessor.cells.push(c); }); })}>+ Add All Workbook Cells</button>
-      <span className="text-xs text-slate-500">{model.assessor.cells.length} of {workbookCells.length} workbook cells on the Assessor</span>{!workbookCells.length && <span className="text-xs text-amber-700" data-testid="gov-onboarding">No cells yet: import a workbook or add cell lines in 2. Data &amp; Gap Filler, then press + Add All Workbook Cells.</span>}</section>
-
-    <Card title="Gate Assessor" term="Gate Assessor" source="Gate Assessor ratings (per cell)" right={<span className="text-xs">HS&amp;E themes (3 and 7) rated Not met → gate BLOCKED</span>}>
-      <div className="overflow-auto"><table className="w-full min-w-[900px]"><thead><tr><Th>Theme</Th>{GATES.map((g) => <Th key={g}><div>{g}</div><button className="btn mt-1 text-[11px] !py-0.5" data-testid={`mark-met-${g}`} onClick={() => markMet(g)}>Mark Gate Met</button></Th>)}</tr></thead><tbody>
-        {THEMES.map((t, ti) => <tr key={t}><td className="td font-medium whitespace-nowrap">{ti + 1}. {t}{HSE_THEMES.includes(ti + 1) && <span className="chip bg-bad ml-1">HS&amp;E</span>}</td>
-          {GATES.map((g) => { const r = model.assessor.ratings[ratingKey(g, ti + 1, active)] ?? ''; return <td key={g} className={`td w-28 ${focus?.kind === 'assessor' && focus.ref === g ? 'focus-flash' : ''}`}>
-            <select aria-label={`${g} theme ${ti + 1} rating`} className={`inp ${r === '' ? 'inp-gap' : ''}`} style={{ borderLeft: `4px solid ${RC[r]}` }} value={r} onChange={(e) => edit((d) => { d.assessor.ratings[ratingKey(g, ti + 1, active)] = e.target.value as Rating; })}>
-              <option value="">— rate —</option><option>Met</option><option>Partial</option><option>Not met</option></select></td>; })}</tr>)}
-        <tr className="bg-steel-50 font-semibold"><td className="td">Gate status</td>{gates.map((g) => <td key={g.gate} className="td" data-testid={`gate-status-${g.gate}`}><span className="chip" style={{ background: g.blocked ? '#c0392b' : g.label === 'PASSED' ? '#1f8a4c' : g.label === 'NOT STARTED' ? '#8a97a5' : '#c98a00' }}>{g.label}</span></td>)}</tr>
-        <tr><td className="td font-semibold">Evidence Check (6-point)</td>{gates.map((g) => <td key={g.gate} className="td font-mono" data-testid={`evidence-${g.gate}`}>{g.evidence} / 6</td>)}</tr>
-        <tr><td className="td font-semibold">Gate maturity</td>{gates.map((g) => <td key={g.gate} className="td"><div className="h-2 bg-steel-200 rounded"><div className="h-2 rounded bg-accent" style={{ width: `${g.maturity * 100}%` }} /></div><span className="text-[11px]">{(g.maturity * 100).toFixed(0)}% · {g.met}M {g.partial}P {g.notMet}N</span></td>)}</tr></tbody></table></div>
-      <details className="mt-3"><summary className="cursor-pointer font-semibold">Evidence Check: tick the evidence behind each gate</summary>
-        <table className="w-full mt-2"><thead><tr><Th>Evidence</Th>{GATES.map((g) => <Th key={g}>{g}</Th>)}</tr></thead><tbody>{EVIDENCE.map((e, ei) => <tr key={e}><td className="td">{ei + 1}. {e}</td>{GATES.map((g) => <td key={g} className="td"><Toggle label={`${g} evidence ${ei + 1}`} on={!!model.assessor.evidence[g]?.[ei]} onText="YES" offText="NO" onChange={(v) => edit((d) => { const a = d.assessor.evidence[g] ?? Array(6).fill(false); a[ei] = v; d.assessor.evidence[g] = a; })} /></td>)}</tr>)}</tbody></table></details></Card>
+      <p className="mt-1 text-slate-700">Gate &amp; Passport Status is managed in <b>4. Gate &amp; Passport Status</b>. Use this screen to log and track risks, assumptions, opportunities and actions in the Register below.</p></section>
 
     <Card title="Risks, Assumptions, Opportunities & Actions" term="Register" source="Risk, Assumption, Opportunity &amp; Action Register" right={<button className="btn-p" onClick={() => edit((d) => d.register.push({ id: `R${String(d.register.length + 1).padStart(2, '0')}`, type: 'Risk', title: '', owner: '', timeImpact: null, costImpact: null, due: '', status: 'Open', link: '', probability: null }))}>+ Add item</button>}>
       <div className="overflow-auto"><table className="w-full min-w-[1150px]"><thead><tr><Th>Ref</Th><Th>Type</Th><Th>Title</Th><Th>Owner</Th><Th>Cell / FPD</Th><Th>Probability (1–5)</Th><Th>Time (1–5)</Th><Th>Cost (1–5)</Th><Th term="Impact Score">Score</Th><Th>Level</Th><Th>Due</Th><Th>Status</Th><Th>Flags</Th><th className="th" /></tr></thead>

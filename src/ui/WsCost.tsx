@@ -1,16 +1,25 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { calcAsset, factoriesOf, machinesToAdd } from '../engine/calc';
 import type { Asset } from '../engine/types';
 import { useApp } from '../store';
 import { Card, NumInput, Th } from './kit';
 
 const UNC_PRESETS: Record<string, number> = { 'Low ±10%': 0.10, 'Medium ±25%': 0.25, 'High ±40%': 0.40 };
+const DEFAULT_UNC = 0.25; // Medium ±25% is the default when no uncertainty is set
 const fmt = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`;
 const EMPTY = '—';
+
+const UNC_GUIDE: { label: string; desc: string }[] = [
+  { label: 'Low ±10%', desc: 'Firm / Budgetary Quote: Written vendor quote, frozen spec, known civil/installation scope.' },
+  { label: 'Medium ±25%', desc: 'Preliminary / Parametric Estimate: Comparable historical asset cost, outline layout, standard services.' },
+  { label: 'High ±40%', desc: 'Early Concept / Order-of-Magnitude: Bespoke equipment, unverified civils/extraction, early concept stage.' },
+  { label: 'Custom ±%', desc: 'Bespoke Tolerance: Manual ±% range from supplier/programme risk assessment.' },
+];
 
 export function WsCost() {
   const { model, edit, filters } = useApp();
   const globalFac = filters.factory;
+  const [uncInfoOpen, setUncInfoOpen] = useState(false);
 
   const upd = (id: string, fn: (a: Asset) => void) => edit((d) => { const a = d.assets.find((x) => x.id === id); if (a) fn(a); });
 
@@ -18,7 +27,7 @@ export function WsCost() {
     const machines = a.machines ?? 0;
     const unit = a.costPerMachine ?? 0;
     const install = a.installCostPerMachine ?? 0;
-    const unc = a.costUncPct ?? 0;
+    const unc = a.costUncPct ?? DEFAULT_UNC;
     const totalPerMachine = unit + install;
     const baseTotal = machines * totalPerMachine;
     const addQty = machinesToAdd(calcAsset(model, a, 'model')) ?? 0;
@@ -51,6 +60,19 @@ export function WsCost() {
         <div className="text-[13px]"><span className="text-slate-500 mr-1">Expansion CapEx</span><b className="font-mono">{fmt(estateTotals.expansion)}</b></div>
       </div>
 
+      {/* Uncertainty guide popover */}
+      {uncInfoOpen && (
+        <div className="card p-4 border border-blue-200 bg-blue-50 relative">
+          <button className="absolute top-2 right-2 text-slate-500 hover:text-slate-800" aria-label="Close uncertainty guide" onClick={() => setUncInfoOpen(false)}>✕</button>
+          <b className="text-[13px]">Uncertainty Band Guide</b>
+          <ul className="mt-2 grid gap-2">
+            {UNC_GUIDE.map(({ label, desc }) => (
+              <li key={label} className="text-[13px]"><span className="font-semibold text-slate-700">{label}</span> — {desc}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {factories.map((factory) => {
         const facAssets = model.assets.filter((a) => a.factory === factory);
         const cells = [...new Set(facAssets.map((a) => a.cell))].sort();
@@ -66,7 +88,8 @@ export function WsCost() {
                     <Th>Current Qty</Th><Th>Add'l Qty Needed</Th>
                     <Th>Unit Asset Cost (£)</Th><Th>Install / Civils / Tooling (£)</Th>
                     <Th>Base Total (£)</Th><Th>Expansion CapEx (£)</Th>
-                    <Th>Uncertainty</Th><Th>Low Estimate (£)</Th><Th>Most Likely / Base (£)</Th><Th>High / Worst-Case (£)</Th>
+                    <Th><span className="flex items-center gap-1">Uncertainty<button aria-label="Uncertainty band guide" className="rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold w-4 h-4 flex items-center justify-center hover:bg-blue-200" onClick={() => setUncInfoOpen((v) => !v)}>?</button></span></Th>
+                    <Th>Low Estimate (£)</Th><Th>Most Likely / Base (£)</Th><Th>High / Worst-Case (£)</Th>
                     <Th>Cost Basis / Assumption Note</Th>
                   </tr>
                 </thead>
@@ -79,7 +102,8 @@ export function WsCost() {
                     const rows: JSX.Element[] = [];
                     cellAssets.forEach((a) => {
                       const c = costCalc(a);
-                      const uncLabel = Object.entries(UNC_PRESETS).find(([, v]) => Math.abs(v - (a.costUncPct ?? 0)) < 0.001)?.[0] ?? 'Custom';
+                      const eff = a.costUncPct ?? DEFAULT_UNC;
+                      const uncLabel = Object.entries(UNC_PRESETS).find(([, v]) => Math.abs(v - eff) < 0.001)?.[0] ?? 'Custom';
                       rows.push(
                         <tr key={a.id}>
                           <td className="td text-xs whitespace-nowrap">{a.cell}</td>
@@ -87,12 +111,15 @@ export function WsCost() {
                           <td className="td text-xs">{a.passportShift ? 'Passport' : 'Model'}</td>
                           <td className="td font-mono text-center">{a.machines ?? EMPTY}</td>
                           <td className="td font-mono text-center">{c.addQty > 0 ? c.addQty : EMPTY}</td>
-                          <td className="td w-28"><NumInput label={`Unit cost of ${a.asset}`} value={a.costPerMachine} onChange={(v) => upd(a.id, (x) => { x.costPerMachine = v; })} /></td>
-                          <td className="td w-28"><NumInput label={`Install cost of ${a.asset}`} value={a.installCostPerMachine} onChange={(v) => upd(a.id, (x) => { x.installCostPerMachine = v; })} /></td>
+                          <td className="td w-28">
+                            {!c.hasData && a.costPerMachine === null && <span className="chip text-[10px]" style={{ background: '#8a97a5' }}>Unpriced</span>}
+                            <NumInput label={`Unit cost of ${a.asset}`} value={a.costPerMachine} placeholder="Enter £" onChange={(v) => upd(a.id, (x) => { x.costPerMachine = v; })} />
+                          </td>
+                          <td className="td w-28"><NumInput label={`Install cost of ${a.asset}`} value={a.installCostPerMachine} placeholder="Enter £" onChange={(v) => upd(a.id, (x) => { x.installCostPerMachine = v; })} /></td>
                           <td className="td font-mono whitespace-nowrap">{c.hasData ? fmt(c.baseTotal) : EMPTY}</td>
                           <td className="td font-mono whitespace-nowrap">{c.addQty > 0 && c.hasData ? fmt(c.expansionCapEx) : EMPTY}</td>
                           <td className="td w-36">
-                            <select aria-label={`Uncertainty level of ${a.asset}`} className="inp" value={uncLabel} onChange={(e) => { const v = UNC_PRESETS[e.target.value]; if (v !== undefined) upd(a.id, (x) => { x.costUncPct = v; }); }}>
+                            <select aria-label={`Uncertainty level of ${a.asset}`} className="inp" value={uncLabel} onChange={(e) => { const v = UNC_PRESETS[e.target.value]; upd(a.id, (x) => { x.costUncPct = v !== undefined ? v : (a.costUncPct ?? null); }); if (e.target.value === 'Custom' && a.costUncPct === null) upd(a.id, (x) => { x.costUncPct = DEFAULT_UNC; }); }}>
                               {Object.keys(UNC_PRESETS).map((k) => <option key={k}>{k}</option>)}
                               <option>Custom</option>
                             </select>

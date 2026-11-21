@@ -40,7 +40,7 @@ console.log('0. Blank start, session cache, Clear / Blank Workspace, atomic wipe
   ok((await page.getByLabel('Asset filter').locator('option').count()) === 1, 'empty workbook has 0 assets');
   await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'empty workbook has 0 FPDs');
   await page.getByTestId('ws-4').click(); ok(await page.getByTestId('gp-onboarding').isVisible(), 'empty workbook: Gate & Passport Status shows onboarding');
-  await page.getByTestId('ws-5').click(); ok((await page.getByTestId('active-cell-badge').innerText()).includes('All cells'), 'empty workbook has no assessed cells');
+  await page.getByTestId('ws-5').click(); ok(await page.getByTestId('assessor-help').isVisible(), 'empty workbook: Scenarios & Register shows help banner');
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
   ok(await page.getByTestId('dropzone').isVisible(), 'Clear / Blank Workspace returns to blank start');
   await loadSample(page);
@@ -139,7 +139,6 @@ console.log('4. All workspaces, flow, self-test, export, autosave');
   await last.getByLabel('Delete link').click();
   await page.getByTestId('ws-5').click();
   ok(await page.getByTestId('lever-Set A').isVisible(), 'Set A/B/C lever tester');
-  ok((await page.getByTestId('gate-status-Design').innerText()).includes('BLOCKED (HS&E)'), 'Design gate BLOCKED (HS&E)');
   ok(await page.getByTestId('overdue').first().isVisible(), 'overdue action flagged');
   await page.getByTestId('selftest-drawer').locator('summary').click();
   ok((await page.getByTestId('selftest-total').innerText()).startsWith('10 / 10') && (await page.getByTestId('selftest-10').isVisible()), '10-point self-test drawer: 10/10 Passed');
@@ -273,13 +272,14 @@ console.log('7. Command bar, toasts, filters, multi-cell FPD, shifts, gates');
   for (const f of ['HT', 'DPF']) { await page.locator('[data-testid=factory-filter] button', { hasText: new RegExp(`^${f}$`) }).click(); ok((await page.getByLabel('Name of FPD-X1').count()) === 1, `cross-factory FPD stays visible under ${f}`); }
   await page.locator('[data-testid=factory-filter] button', { hasText: /^All$/ }).click();
   await page.getByLabel('Delete FPD-X1').click(); ok((await page.getByLabel('Name of FPD-X1').count()) === 0, 'FPD row delete');
-  // gates
+  // gates — Gate & Passport Status (tab 4) + Scenarios & Register (tab 5)
+  await page.getByTestId('ws-4').click();
+  ok(await page.getByTestId('gp-help').isVisible(), 'Gate & Passport Status help banner visible');
+  const gpThemeLabels = [[1, 'Goals and scope'], [2, 'Product families and process routes defined'], [3, 'Utilisation assessed'], [4, 'Value-add attributes assigned'], [6, 'People']];
+  for (const [tNum, tName] of gpThemeLabels) { await page.getByLabel(`Define theme ${tNum} ${tName}`).first().selectOption('Met'); }
+  ok((await page.locator('.chip', { hasText: 'PASSED 5/5' }).count()) >= 1, 'Marking all 5 themes Met on Define gate shows PASSED 5/5');
   await page.getByTestId('ws-5').click();
-  ok(await page.getByTestId('assessor-help').isVisible(), 'What this screen does banner');
-  await page.getByTestId('add-all-cells').click();
-  ok(await page.getByTestId('add-all-cells').isDisabled(), '+ Add All Workbook Cells adds every cell (DC16 resolved)');
-  await page.getByTestId('mark-met-Launch').click();
-  ok((await page.getByTestId('gate-status-Launch').innerText()).includes('PASSED'), 'Mark Gate Met passes the gate');
+  ok(await page.getByTestId('assessor-help').isVisible(), 'Scenarios & Register: What this screen does banner visible');
   ok((await page.getByTestId('selftest-drawer').getAttribute('open')) === null, 'self-test is collapsed by default');
   // lever presets + log to scenario table (blank workbook starts with the three presets)
   page.once('dialog', (d) => d.accept()); await page.getByTestId('clear-all').click();
@@ -365,7 +365,7 @@ console.log('9. Overall Combined card, compact charts, dense Data table, tooltip
   const { ctx, page, errors } = await fresh();
   ok((await page.evaluate(() => localStorage.length)) === 0, 'first boot: nothing cached');
   await page.getByRole('button', { name: 'Start with an empty workbook' }).click();
-  for (const [n, id] of [[1, 'empty-onboarding'], [2, 'data-onboarding'], [4, 'gp-onboarding'], [5, 'gov-onboarding']]) { await page.getByTestId(`ws-${n}`).click(); ok(await page.getByTestId(id).isVisible(), `workspace ${n} shows its onboarding prompt`); }
+  for (const [n, id] of [[1, 'empty-onboarding'], [2, 'data-onboarding'], [4, 'gp-onboarding'], [5, 'assessor-help']]) { await page.getByTestId(`ws-${n}`).click(); ok(await page.getByTestId(id).isVisible(), `workspace ${n} shows its onboarding prompt`); }
   await page.getByTestId('ws-3').click(); ok(await page.getByText('No product families (FPD) yet.').isVisible(), 'workspace 3 shows its onboarding prompt');
   ok(errors.length === 0, 'blank workspace: zero console errors'); await ctx.close();
 }

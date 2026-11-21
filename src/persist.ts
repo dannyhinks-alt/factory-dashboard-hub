@@ -31,7 +31,10 @@ export function readCachedSession(text: string | null): Model | null {
   } catch { return null; }
 }
 
-/** Opens a file picker for reading; returns the selected File, or null when the API is unavailable or the user cancels. */
+const PICKER_BLOCKED = ['SecurityError', 'NotAllowedError'];
+
+/** Opens a file picker for reading; returns the selected File, null when the API is unavailable or the user cancels.
+ *  Throws PickerUnavailableError (name: 'PickerUnavailableError') when the browser has the API but blocks it (file:// origin). */
 export async function pickOpenFile(description: string, accept: Record<string, string[]>): Promise<File | null> {
   const w = window as FsPickerWindow;
   if (typeof w.showOpenFilePicker !== 'function') return null;
@@ -39,16 +42,27 @@ export async function pickOpenFile(description: string, accept: Record<string, s
     const [fh] = await w.showOpenFilePicker!({ id: FOLDER_ID, startIn: _lastHandle ?? 'desktop', multiple: false, types: [{ description, accept }] });
     _lastHandle = fh as object;
     return await fh.getFile();
-  } catch (e) { if ((e as Error).name === 'AbortError') return null; throw e; }
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') return null;
+    if (PICKER_BLOCKED.includes((e as Error).name)) { const err = new Error('File picker blocked by browser security policy — falling back to file input.'); err.name = 'PickerUnavailableError'; throw err; }
+    throw e;
+  }
 }
 
-/** Opens a file picker for saving; returns the handle, or null when the API is unavailable. Throws AbortError when the user cancels. */
+/** Opens a file picker for saving; returns the handle, or null when the API is unavailable or blocked by browser policy.
+ *  Throws AbortError when the user cancels. */
 export async function pickSaveFile(suggested: string, description: string, accept: Record<string, string[]>): Promise<FsHandle | null> {
   const w = window as FsPickerWindow;
   if (typeof w.showSaveFilePicker !== 'function') return null;
-  const h = await w.showSaveFilePicker!({ suggestedName: suggested, id: FOLDER_ID, startIn: _lastHandle ?? 'desktop', types: [{ description, accept }] });
-  _lastHandle = h as object;
-  return h;
+  try {
+    const h = await w.showSaveFilePicker!({ suggestedName: suggested, id: FOLDER_ID, startIn: _lastHandle ?? 'desktop', types: [{ description, accept }] });
+    _lastHandle = h as object;
+    return h;
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e;
+    if (PICKER_BLOCKED.includes((e as Error).name)) return null;
+    throw e;
+  }
 }
 
 export async function writeHandle(h: FsHandle, data: string | ArrayBuffer | ArrayBufferView | Blob) { const w = await h.createWritable(); await w.write(data); await w.close(); }

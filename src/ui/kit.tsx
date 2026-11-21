@@ -33,12 +33,12 @@ export function Card({ title, term, children, right, id, source }: { title: Reac
 export const BAND_COL: Record<Band, string> = { GREEN: '#1f8a4c', AMBER: '#c98a00', RED: '#c0392b', NONE: '#8a97a5' };
 export const BandChip = ({ band, children }: { band: Band; children?: ReactNode }) => <span className="chip" style={{ background: BAND_COL[band] }}>{children ?? (band === 'NONE' ? 'NO DATA' : band)}</span>;
 
-export function NumInput({ value, onChange, pct = false, step, min, label, gap = true, w }: { value: number | null; onChange: (v: number | null) => void; pct?: boolean; step?: number; min?: number; label: string; gap?: boolean; w?: string }) {
+export function NumInput({ value, onChange, pct = false, step, min, label, gap = true, w, placeholder = 'gap' }: { value: number | null; onChange: (v: number | null) => void; pct?: boolean; step?: number; min?: number; label: string; gap?: boolean; w?: string; placeholder?: string }) {
   const show = (v: number | null) => (v === null ? '' : String(pct ? Math.round(v * 10000) / 100 : v));
   const [t, setT] = useState(show(value));
   const last = useRef(value);
   useEffect(() => { if (last.current !== value) { setT(show(value)); last.current = value; } }, [value]); // eslint-disable-line
-  return <input aria-label={label} type="number" step={step ?? (pct ? 1 : 'any')} min={min} className={`inp ${gap && value === null ? 'inp-gap' : ''} ${w ?? ''}`} value={t} placeholder="gap"
+  return <input aria-label={label} type="number" step={step ?? (pct ? 1 : 'any')} min={min} className={`inp ${gap && value === null ? 'inp-gap' : ''} ${w ?? ''}`} value={t} placeholder={placeholder}
     onBlur={() => setT(show(value))}
     onChange={(e) => { setT(e.target.value); const n = e.target.value.trim() === '' ? null : Number(e.target.value); const v = n === null || !Number.isFinite(n) ? null : pct ? normalisePct(n) : n; last.current = v; onChange(v); }} />;
 }

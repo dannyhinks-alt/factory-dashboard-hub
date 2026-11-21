@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
-import { LEVER_PRESETS, DEFAULT_LIMITS, DEFAULT_SHIFT_HOURS, DICTIONARY, GATES, PLACEHOLDERS, SHEETS, THEMES } from './constants';
+import { LEVER_PRESETS, DEFAULT_LIMITS, DEFAULT_SHIFT_HOURS, DICTIONARY, GATES, GP_GATES, GP_THEME_NUMS, GP_THEMES, PLACEHOLDERS, SHEETS, THEMES } from './constants';
+import { gpRatingKey, gpDateKey } from './governance';
 import { calendarHours, cells, compareRows, costByFactory } from './calc';
 import { fpdCalc, solve } from './flow';
 import { pressureList } from './sensitivity';
@@ -122,6 +123,57 @@ export function parseWorkbook(wb: XLSX.WorkBook, sourceName: string): ParseResul
     if (g) m.assessor.evidence[g] = [r.e1, r.e2, r.e3, r.e4, r.e5, r.e6].map(yes);
   });
   m.assessor.cells = table(arows, { c: ['assessedcell'] }, ['c']).map((r) => str(r.c)).filter(Boolean);
+  // ---- Gate & Passport Status — detect sheet by content
+  //   Accept any sheet whose header row contains "Gate" + at least one GP theme name or "Utilisation assessed" / "People"
+  const gpAnchorWords = ['goals and scope', 'utilisation assessed', 'people'];
+  const gpSheetName = wb.SheetNames.find((sn) => {
+    const rows: Row[] = XLSX.utils.sheet_to_json<Row>(wb.Sheets[sn], { header: 1, defval: '', raw: true, blankrows: false });
+    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+      const headers = rows[r].map((v) => str(v).toLowerCase().replace(/^\d+\.\s*/, '').trim());
+      if (headers.some((h) => h === 'gate') && headers.some((h) => gpAnchorWords.some((w) => h.includes(w)))) return true;
+    }
+    return false;
+  });
+  if (gpSheetName) {
+    const gpRows: Row[] = XLSX.utils.sheet_to_json<Row>(wb.Sheets[gpSheetName], { header: 1, defval: '', raw: true, blankrows: false });
+    let gpHr = -1; const gpCols: Record<string, number> = {};
+    for (let r = 0; r < Math.min(gpRows.length, 10); r++) {
+      const headers = gpRows[r].map((v) => str(v).toLowerCase().replace(/^\d+\.\s*/, '').trim());
+      if (headers.some((h) => h === 'gate') && headers.some((h) => gpAnchorWords.some((w) => h.includes(w)))) {
+        gpHr = r;
+        headers.forEach((h, c) => {
+          if (h === 'cell id' || h === 'cell') gpCols.cell = gpCols.cell ?? c;
+          else if (h === 'gate') gpCols.gate = gpCols.gate ?? c;
+          else if (h === 'date reviewed' || h === 'date') gpCols.date = gpCols.date ?? c;
+          else if (h === 'headline note' || h === 'note') gpCols.note = gpCols.note ?? c;
+          else {
+            for (const tn of GP_THEME_NUMS) {
+              const themeText = GP_THEMES[tn].toLowerCase();
+              if (h === themeText || h.includes(themeText.split(' ')[0]) && h.includes(themeText.split(' ').slice(-1)[0])) gpCols[`t${tn}`] = gpCols[`t${tn}`] ?? c;
+            }
+          }
+        });
+        break;
+      }
+    }
+    if (gpHr >= 0 && gpCols.cell !== undefined && gpCols.gate !== undefined) {
+      for (let r = gpHr + 1; r < gpRows.length; r++) {
+        const row = gpRows[r] ?? [];
+        const cell = str(row[gpCols.cell]).trim(); const gate = str(row[gpCols.gate]).trim();
+        if (!cell || !gate) continue;
+        const normalGate = GP_GATES.find((g) => g.toLowerCase() === gate.toLowerCase());
+        if (!normalGate) continue;
+        for (const tn of GP_THEME_NUMS) {
+          const col = gpCols[`t${tn}`];
+          if (col !== undefined) m.assessor.gpRatings[gpRatingKey(cell, normalGate, tn)] = pickRating(row[col]);
+        }
+        const dateVal = gpCols.date !== undefined ? isoDate(row[gpCols.date]) : '';
+        if (dateVal) m.assessor.gpDateReviewed[gpDateKey(cell, normalGate)] = dateVal;
+        const noteVal = gpCols.note !== undefined ? str(row[gpCols.note]) : '';
+        if (noteVal) m.assessor.gpHeadlineNote[gpDateKey(cell, normalGate)] = noteVal;
+      }
+    }
+  }
   // ---- Dictionary
   table(rowsOf(wb, 'Dictionary'), { term: ['term'], def: ['definition', 'meaning'] }, ['term', 'def']).forEach((r) => { if (str(r.term) && str(r.def)) m.dictionary[str(r.term)] = str(r.def); });
   if (!m.assets.length) warnings.push('No asset rows were found on the Data tab.');
